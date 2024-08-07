@@ -4,7 +4,6 @@ import torch
 import triton
 from ninetoothed import Symbol, Tensor
 
-
 BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
 BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
 BLOCK_SIZE_K = Symbol("BLOCK_SIZE_K", meta=True)
@@ -85,4 +84,4 @@ def benchmark(M, N, K, provider):
     return perf(ms), perf(max_ms), perf(min_ms)
 
 
-benchmark.run(show_plots=True, print_data=True)
+benchmark.run(show_plots=True, print_data=True, save_path=".")

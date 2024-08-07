@@ -3,7 +3,6 @@ import torch
 import triton
 from ninetoothed import Symbol, Tensor
 
-
 BLOCK_SIZE = Symbol("BLOCK_SIZE", meta=True)
 
 
@@ -65,4 +64,4 @@ def benchmark(size, provider):
     return gbps(ms), gbps(max_ms), gbps(min_ms)
 
 
-benchmark.run(print_data=True, show_plots=True)
+benchmark.run(print_data=True, show_plots=True, save_path=".")
