@@ -1,4 +1,5 @@
 import ninetoothed
+import ninetoothed.language as ntl
 import torch
 import triton
 from ninetoothed import Symbol, Tensor
@@ -26,12 +27,10 @@ def matmul(lhs, rhs):
 
     @ninetoothed.jit
     def matmul_kernel(lhs: lhs_tiled, rhs: rhs_tiled, output: output_tiled):
-        accumulator = ninetoothed.language.zeros(
-            output.shape, dtype=ninetoothed.language.float32
-        )
+        accumulator = ntl.zeros(output.shape, dtype=ntl.float32)
         for k in range(lhs.shape[1]):
-            accumulator = ninetoothed.language.dot(lhs[0, k], rhs[k, 0], accumulator)
-        output = accumulator.to(ninetoothed.language.float16)
+            accumulator = ntl.dot(lhs[0, k], rhs[k, 0], accumulator)
+        output = accumulator.to(ntl.float16)
 
     output = torch.empty(
         (lhs.shape[0], rhs.shape[1]), device=lhs.device, dtype=torch.float16
