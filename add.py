@@ -1,6 +1,7 @@
 import ninetoothed
 import torch
 import triton
+import triton.language as tl
 from ninetoothed import Symbol, Tensor
 
 BLOCK_SIZE = Symbol("BLOCK_SIZE", meta=True)
@@ -23,14 +24,57 @@ def add(lhs, rhs):
     return output
 
 
+@triton.jit
+def triton_add_kernel(
+    lhs_ptr,
+    rhs_ptr,
+    output_ptr,
+    n_elements,
+    BLOCK_SIZE: tl.constexpr,
+):
+    pid = tl.program_id(0)
+
+    block_start = pid * BLOCK_SIZE
+    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
+
+    lhs = tl.load(lhs_ptr + offsets, mask=mask)
+    rhs = tl.load(rhs_ptr + offsets, mask=mask)
+    output = lhs + rhs
+
+    tl.store(output_ptr + offsets, output, mask=mask)
+
+
+def triton_add(lhs, rhs):
+    output = torch.empty_like(lhs)
+    n_elements = output.numel()
+
+    def grid(meta):
+        return (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
+
+    triton_add_kernel[grid](lhs, rhs, output, n_elements, BLOCK_SIZE=1024)
+
+    return output
+
+
 torch.manual_seed(0)
 size = 98432
 lhs = torch.rand(size, device="cuda")
 rhs = torch.rand(size, device="cuda")
-torch_output = lhs + rhs
 ninetoothed_output = add(lhs, rhs)
-print(torch_output)
+torch_output = lhs + rhs
+triton_output = triton_add(lhs, rhs)
 print(ninetoothed_output)
+print(torch_output)
+print(triton_output)
+if torch.allclose(ninetoothed_output, torch_output):
+    print("✅ NineToothed and PyTorch match.")
+else:
+    print("❌ NineToothed and PyTorch differ.")
+if torch.allclose(ninetoothed_output, triton_output):
+    print("✅ NineToothed and Triton match.")
+else:
+    print("❌ NineToothed and Triton differ.")
 
 
 @triton.testing.perf_report(
@@ -39,27 +83,34 @@ print(ninetoothed_output)
         x_vals=[2**i for i in range(12, 28, 1)],
         x_log=True,
         line_arg="provider",
-        line_vals=["ninetoothed", "torch"],
-        line_names=["NineToothed", "PyTorch"],
-        styles=[("blue", "-"), ("green", "-")],
+        line_vals=["ninetoothed", "torch", "triton"],
+        line_names=["NineToothed", "PyTorch", "Triton"],
+        styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
         ylabel="GB/s",
         plot_name="vector-addition-performance",
         args={},
     )
 )
 def benchmark(size, provider):
-    x = torch.rand(size, device="cuda", dtype=torch.float32)
-    y = torch.rand(size, device="cuda", dtype=torch.float32)
+    lhs = torch.rand(size, device="cuda", dtype=torch.float32)
+    rhs = torch.rand(size, device="cuda", dtype=torch.float32)
     quantiles = [0.5, 0.2, 0.8]
-    if provider == "torch":
-        ms, min_ms, max_ms = triton.testing.do_bench(lambda: x + y, quantiles=quantiles)
+
     if provider == "ninetoothed":
         ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: add(x, y), quantiles=quantiles
+            lambda: add(lhs, rhs), quantiles=quantiles
+        )
+    elif provider == "torch":
+        ms, min_ms, max_ms = triton.testing.do_bench(
+            lambda: lhs + rhs, quantiles=quantiles
+        )
+    elif provider == "triton":
+        ms, min_ms, max_ms = triton.testing.do_bench(
+            lambda: triton_add(lhs, rhs), quantiles=quantiles
         )
 
     def gbps(ms):
-        return 3 * x.numel() * x.element_size() / ms * 1e-6
+        return 3 * lhs.numel() * lhs.element_size() / ms * 1e-6
 
     return gbps(ms), gbps(max_ms), gbps(min_ms)
 
