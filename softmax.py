@@ -22,7 +22,7 @@ def softmax_kernel(
 def softmax(input):
     output = torch.empty_like(input)
 
-    softmax_kernel(input, output, BLOCK_SIZE=triton.next_power_of_2(input.shape[-1]))
+    softmax_kernel(input, output, BLOCK_SIZE=input.shape[-1])
 
     return output
 
