@@ -225,61 +225,60 @@ def triton_matmul(lhs, rhs):
     return output
 
 
-torch.manual_seed(0)
-shape = (512, 512)
-lhs = torch.randn(shape, device="cuda", dtype=torch.float16)
-rhs = torch.randn(shape, device="cuda", dtype=torch.float16)
-ninetoothed_output = matmul(lhs, rhs)
-torch_output = torch.matmul(lhs, rhs)
-triton_output = triton_matmul(lhs, rhs)
-print(ninetoothed_output)
-print(torch_output)
-print(triton_output)
-if torch.allclose(ninetoothed_output, torch_output):
-    print("✅ NineToothed and PyTorch match.")
-else:
-    print("❌ NineToothed and PyTorch differ.")
-if torch.allclose(ninetoothed_output, triton_output):
-    print("✅ NineToothed and Triton match.")
-else:
-    print("❌ NineToothed and Triton differ.")
+if __name__ == "__main__":
+    torch.manual_seed(0)
+    shape = (512, 512)
+    lhs = torch.randn(shape, device="cuda", dtype=torch.float16)
+    rhs = torch.randn(shape, device="cuda", dtype=torch.float16)
+    ninetoothed_output = matmul(lhs, rhs)
+    torch_output = torch.matmul(lhs, rhs)
+    triton_output = triton_matmul(lhs, rhs)
+    print(ninetoothed_output)
+    print(torch_output)
+    print(triton_output)
+    if torch.allclose(ninetoothed_output, torch_output):
+        print("✅ NineToothed and PyTorch match.")
+    else:
+        print("❌ NineToothed and PyTorch differ.")
+    if torch.allclose(ninetoothed_output, triton_output):
+        print("✅ NineToothed and Triton match.")
+    else:
+        print("❌ NineToothed and Triton differ.")
 
-
-@triton.testing.perf_report(
-    triton.testing.Benchmark(
-        x_names=["m", "n", "k"],
-        x_vals=[128 * i for i in range(2, 33)],
-        line_arg="provider",
-        line_vals=["ninetoothed", "torch", "triton"],
-        line_names=["NineToothed", "PyTorch", "Triton"],
-        styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-        ylabel="TFLOPS",
-        plot_name="matrix-multiplication-performance",
-        args={},
+    @triton.testing.perf_report(
+        triton.testing.Benchmark(
+            x_names=["m", "n", "k"],
+            x_vals=[128 * i for i in range(2, 33)],
+            line_arg="provider",
+            line_vals=["ninetoothed", "torch", "triton"],
+            line_names=["NineToothed", "PyTorch", "Triton"],
+            styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
+            ylabel="TFLOPS",
+            plot_name="matrix-multiplication-performance",
+            args={},
+        )
     )
-)
-def benchmark(m, n, k, provider):
-    lhs = torch.randn((m, k), device="cuda", dtype=torch.float16)
-    rhs = torch.randn((k, n), device="cuda", dtype=torch.float16)
-    quantiles = [0.5, 0.2, 0.8]
+    def benchmark(m, n, k, provider):
+        lhs = torch.randn((m, k), device="cuda", dtype=torch.float16)
+        rhs = torch.randn((k, n), device="cuda", dtype=torch.float16)
+        quantiles = [0.5, 0.2, 0.8]
 
-    if provider == "ninetoothed":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: matmul(lhs, rhs), quantiles=quantiles
-        )
-    elif provider == "torch":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: torch.matmul(lhs, rhs), quantiles=quantiles
-        )
-    elif provider == "triton":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: triton_matmul(lhs, rhs), quantiles=quantiles
-        )
+        if provider == "ninetoothed":
+            ms, min_ms, max_ms = triton.testing.do_bench(
+                lambda: matmul(lhs, rhs), quantiles=quantiles
+            )
+        elif provider == "torch":
+            ms, min_ms, max_ms = triton.testing.do_bench(
+                lambda: torch.matmul(lhs, rhs), quantiles=quantiles
+            )
+        elif provider == "triton":
+            ms, min_ms, max_ms = triton.testing.do_bench(
+                lambda: triton_matmul(lhs, rhs), quantiles=quantiles
+            )
 
-    def perf(ms):
-        return 2 * m * n * k * 1e-12 / (ms * 1e-3)
+        def perf(ms):
+            return 2 * m * n * k * 1e-12 / (ms * 1e-3)
 
-    return perf(ms), perf(max_ms), perf(min_ms)
+        return perf(ms), perf(max_ms), perf(min_ms)
 
-
-benchmark.run(show_plots=True, print_data=True, save_path=".")
+    benchmark.run(show_plots=True, print_data=True, save_path=".")
