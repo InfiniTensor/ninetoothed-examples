@@ -34,12 +34,14 @@ def arrangement(q, k, v, o):
 
 
 def application(q, k, v, o):
+    q_loaded = (q * 1.44269504089).to(ntl.float16)
+
     acc = ntl.zeros((q.shape[-2], q.shape[-1]), dtype=ntl.float32)
     l_i = ntl.full((q.shape[-2],), 1, dtype=ntl.float32)
     m_i = ntl.full((q.shape[-2],), float("-inf"), dtype=ntl.float32)
 
     for i in range(k.shape[0]):
-        qk = ntl.dot((q * 1.44269504089).to(ntl.float16), ntl.trans(k[i]))
+        qk = ntl.dot(q_loaded, ntl.trans(k[i]))
 
         m_ij = ntl.maximum(m_i, ntl.max(qk, 1))
         p = ntl.exp2(qk - m_ij[:, None])
