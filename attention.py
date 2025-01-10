@@ -8,8 +8,8 @@ from ninetoothed import Symbol, Tensor
 
 
 def arrangement(q, k, v, o):
-    BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
-    BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
+    BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", constexpr=True)
+    BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", constexpr=True)
 
     def arrange_q_or_o(input):
         arranged = input.tile((1, 1, BLOCK_SIZE_M, -1))
@@ -63,34 +63,11 @@ attention_kernel = ninetoothed.make(arrangement, application, (q, k, v, o))
 def attention(q, k, v):
     o = torch.empty_like(q, dtype=v.dtype)
 
-    attention_kernel(q, k, v, o)
+    attention_kernel(q, k, v, o, BLOCK_SIZE_M=64, BLOCK_SIZE_N=64)
 
     return o
 
 
-@triton.autotune(
-    configs=[
-        triton.Config(
-            {"BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 128}, num_stages=4, num_warps=8
-        ),
-        triton.Config(
-            {"BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 64}, num_stages=4, num_warps=8
-        ),
-        triton.Config(
-            {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 128}, num_stages=4, num_warps=4
-        ),
-        triton.Config(
-            {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 64}, num_stages=4, num_warps=4
-        ),
-        triton.Config(
-            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 64}, num_stages=4, num_warps=8
-        ),
-        triton.Config(
-            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 32}, num_stages=4, num_warps=8
-        ),
-    ],
-    key=["EMB_DIM"],
-)
 @triton.jit
 def triton_attention_kernel(
     q_ptr,
@@ -214,6 +191,8 @@ def triton_attention(q, k, v):
         *o.stride(),
         SEQ_LEN=seq_len,
         EMB_DIM=emb_dim,
+        BLOCK_SIZE_M=64,
+        BLOCK_SIZE_N=64,
     )
 
     return o

@@ -7,9 +7,9 @@ from ninetoothed import Symbol, Tensor
 
 
 def arrangement(lhs, rhs, output):
-    BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
-    BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
-    BLOCK_SIZE_K = Symbol("BLOCK_SIZE_K", meta=True)
+    BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", constexpr=True)
+    BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", constexpr=True)
+    BLOCK_SIZE_K = Symbol("BLOCK_SIZE_K", constexpr=True)
 
     output_tiled = output.tile((BLOCK_SIZE_M, BLOCK_SIZE_N))
 
@@ -47,96 +47,11 @@ def matmul(lhs, rhs):
         (lhs.shape[0], rhs.shape[1]), device=lhs.device, dtype=torch.float16
     )
 
-    matmul_kernel(lhs, rhs, output)
+    matmul_kernel(lhs, rhs, output, BLOCK_SIZE_M=64, BLOCK_SIZE_N=64, BLOCK_SIZE_K=64)
 
     return output
 
 
-@triton.autotune(
-    configs=[
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 128,
-                "BLOCK_SIZE_N": 256,
-                "BLOCK_SIZE_K": 64,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=3,
-            num_warps=8,
-        ),
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 64,
-                "BLOCK_SIZE_N": 256,
-                "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 128,
-                "BLOCK_SIZE_N": 128,
-                "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 128,
-                "BLOCK_SIZE_N": 64,
-                "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 64,
-                "BLOCK_SIZE_N": 128,
-                "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 128,
-                "BLOCK_SIZE_N": 32,
-                "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=4,
-            num_warps=4,
-        ),
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 64,
-                "BLOCK_SIZE_N": 32,
-                "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=5,
-            num_warps=2,
-        ),
-        triton.Config(
-            {
-                "BLOCK_SIZE_M": 32,
-                "BLOCK_SIZE_N": 64,
-                "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
-            },
-            num_stages=5,
-            num_warps=2,
-        ),
-    ],
-    key=["m", "n", "k"],
-)
 @triton.jit
 def triton_matmul_kernel(
     lhs_ptr,
@@ -220,6 +135,10 @@ def triton_matmul(lhs, rhs):
         rhs.stride(1),
         output.stride(0),
         output.stride(1),
+        BLOCK_SIZE_M=64,
+        BLOCK_SIZE_N=64,
+        BLOCK_SIZE_K=64,
+        GROUP_SIZE_M=8,
     )
 
     return output
