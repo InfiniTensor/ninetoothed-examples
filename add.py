@@ -59,8 +59,9 @@ def triton_add(lhs, rhs):
 
 torch.manual_seed(0)
 size = 98432
-lhs = torch.rand(size, device="cuda")
-rhs = torch.rand(size, device="cuda")
+dtype = torch.float16
+lhs = torch.rand(size, dtype=dtype, device="cuda")
+rhs = torch.rand(size, dtype=dtype, device="cuda")
 ninetoothed_output = add(lhs, rhs)
 torch_output = lhs + rhs
 triton_output = triton_add(lhs, rhs)
@@ -92,8 +93,8 @@ else:
     )
 )
 def benchmark(size, provider):
-    lhs = torch.rand(size, device="cuda", dtype=torch.float32)
-    rhs = torch.rand(size, device="cuda", dtype=torch.float32)
+    lhs = torch.rand(size, device="cuda", dtype=torch.float16)
+    rhs = torch.rand(size, device="cuda", dtype=torch.float16)
     quantiles = [0.5, 0.2, 0.8]
 
     if provider == "ninetoothed":

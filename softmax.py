@@ -72,14 +72,14 @@ def triton_softmax(input):
 
 
 torch.manual_seed(0)
-input = torch.randn(1823, 781, device="cuda")
+input = torch.randn(1823, 781, dtype=torch.float16, device="cuda")
 ninetoothed_output = softmax(input)
 torch_output = torch.softmax(input, axis=-1)
 triton_output = triton_softmax(input)
 print(ninetoothed_output)
 print(torch_output)
 print(triton_output)
-if torch.allclose(ninetoothed_output, torch_output):
+if torch.allclose(ninetoothed_output, torch_output, atol=1e-5):
     print("✅ NineToothed and PyTorch match.")
 else:
     print("❌ NineToothed and PyTorch differ.")
@@ -103,7 +103,7 @@ else:
     )
 )
 def benchmark(m, n, provider):
-    input = torch.randn(m, n, device="cuda", dtype=torch.float32)
+    input = torch.randn(m, n, device="cuda", dtype=torch.float16)
     stream = torch.cuda.Stream()
     torch.cuda.set_stream(stream)
 

@@ -200,8 +200,9 @@ if __name__ == "__main__":
     torch.manual_seed(0)
     n, c, h, w = 4, 3, 224, 224
     k, _, r, s = 8, c, 3, 3
-    input = torch.randn(n, c, h, w, device="cuda")
-    filter = torch.randn(k, c, r, s, device="cuda")
+    dtype = torch.float16
+    input = torch.randn(n, c, h, w, dtype=dtype, device="cuda")
+    filter = torch.randn(k, c, r, s, dtype=dtype, device="cuda")
     ninetoothed_output = conv2d(input, filter)
     torch_output = F.conv2d(input, filter)
     triton_output = triton_conv2d(input, filter)
@@ -233,8 +234,9 @@ if __name__ == "__main__":
     def benchmark(h, w, provider):
         n, c, _, _ = 64, 3, h, w
         k, _, r, s = 64, c, 3, 3
-        input = torch.randn((n, c, h, w), device="cuda")
-        filter = torch.randn((k, c, r, s), device="cuda")
+        dtype = torch.float16
+        input = torch.randn((n, c, h, w), dtype=dtype, device="cuda")
+        filter = torch.randn((k, c, r, s), dtype=dtype, device="cuda")
 
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(lambda: conv2d(input, filter))
