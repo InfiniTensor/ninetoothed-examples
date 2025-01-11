@@ -93,8 +93,8 @@ def triton_matmul_kernel(
 
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
     for i in range(0, tl.cdiv(k, BLOCK_SIZE_K)):
-        lhs = tl.load(lhs_ptrs, mask=offs_k[None, :] < k - i * BLOCK_SIZE_K, other=0.0)
-        rhs = tl.load(rhs_ptrs, mask=offs_k[:, None] < k - i * BLOCK_SIZE_K, other=0.0)
+        lhs = tl.load(lhs_ptrs, mask=offs_k[None, :] < k - i * BLOCK_SIZE_K)
+        rhs = tl.load(rhs_ptrs, mask=offs_k[:, None] < k - i * BLOCK_SIZE_K)
         accumulator = tl.dot(lhs, rhs, accumulator)
         lhs_ptrs += BLOCK_SIZE_K * lhs_stride_k
         rhs_ptrs += BLOCK_SIZE_K * rhs_stride_k
