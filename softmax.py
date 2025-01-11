@@ -33,7 +33,6 @@ def triton_softmax_kernel(
     output_ptr,
     input_row_stride,
     output_row_stride,
-    n_rows,
     n_cols,
     BLOCK_SIZE: tl.constexpr,
 ):
@@ -63,7 +62,6 @@ def triton_softmax(input):
         output,
         input.stride(0),
         output.stride(0),
-        input.shape[0],
         input.shape[1],
         BLOCK_SIZE=triton.next_power_of_2(input.shape[-1]),
     )

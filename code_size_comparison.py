@@ -7,7 +7,7 @@ plt.rcParams["font.weight"] = "bold"
 plt.rcParams["axes.labelweight"] = "bold"
 
 kernels = ("add", "softmax", "matmul", "conv2d", "attention")
-lines_of_code = {"Triton": (19, 26, 57, 110, 98), "NineToothed": (10, 12, 34, 17, 51)}
+lines_of_code = {"Triton": (19, 25, 57, 110, 98), "NineToothed": (10, 12, 34, 17, 51)}
 
 x = np.arange(len(kernels))
 width = 0.4
