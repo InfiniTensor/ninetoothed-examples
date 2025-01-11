@@ -57,63 +57,62 @@ def triton_add(lhs, rhs):
     return output
 
 
-torch.manual_seed(0)
-size = 98432
-dtype = torch.float16
-lhs = torch.rand(size, dtype=dtype, device="cuda")
-rhs = torch.rand(size, dtype=dtype, device="cuda")
-ninetoothed_output = add(lhs, rhs)
-torch_output = lhs + rhs
-triton_output = triton_add(lhs, rhs)
-print(ninetoothed_output)
-print(torch_output)
-print(triton_output)
-if torch.allclose(ninetoothed_output, torch_output):
-    print("✅ NineToothed and PyTorch match.")
-else:
-    print("❌ NineToothed and PyTorch differ.")
-if torch.allclose(ninetoothed_output, triton_output):
-    print("✅ NineToothed and Triton match.")
-else:
-    print("❌ NineToothed and Triton differ.")
+if __name__ == "__main__":
+    torch.manual_seed(0)
+    size = 98432
+    dtype = torch.float16
+    lhs = torch.rand(size, dtype=dtype, device="cuda")
+    rhs = torch.rand(size, dtype=dtype, device="cuda")
+    ninetoothed_output = add(lhs, rhs)
+    torch_output = lhs + rhs
+    triton_output = triton_add(lhs, rhs)
+    print(ninetoothed_output)
+    print(torch_output)
+    print(triton_output)
+    if torch.allclose(ninetoothed_output, torch_output):
+        print("✅ NineToothed and PyTorch match.")
+    else:
+        print("❌ NineToothed and PyTorch differ.")
+    if torch.allclose(ninetoothed_output, triton_output):
+        print("✅ NineToothed and Triton match.")
+    else:
+        print("❌ NineToothed and Triton differ.")
 
-
-@triton.testing.perf_report(
-    triton.testing.Benchmark(
-        x_names=["size"],
-        x_vals=[2**i for i in range(12, 28, 1)],
-        x_log=True,
-        line_arg="provider",
-        line_vals=["ninetoothed", "torch", "triton"],
-        line_names=["NineToothed", "PyTorch", "Triton"],
-        styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-        ylabel="GB/s",
-        plot_name="vector-addition-performance",
-        args={},
+    @triton.testing.perf_report(
+        triton.testing.Benchmark(
+            x_names=["size"],
+            x_vals=[2**i for i in range(12, 28, 1)],
+            x_log=True,
+            line_arg="provider",
+            line_vals=["ninetoothed", "torch", "triton"],
+            line_names=["NineToothed", "PyTorch", "Triton"],
+            styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
+            ylabel="GB/s",
+            plot_name="vector-addition-performance",
+            args={},
+        )
     )
-)
-def benchmark(size, provider):
-    lhs = torch.rand(size, device="cuda", dtype=torch.float16)
-    rhs = torch.rand(size, device="cuda", dtype=torch.float16)
-    quantiles = [0.5, 0.2, 0.8]
+    def benchmark(size, provider):
+        lhs = torch.rand(size, device="cuda", dtype=torch.float16)
+        rhs = torch.rand(size, device="cuda", dtype=torch.float16)
+        quantiles = [0.5, 0.2, 0.8]
 
-    if provider == "ninetoothed":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: add(lhs, rhs), quantiles=quantiles
-        )
-    elif provider == "torch":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: lhs + rhs, quantiles=quantiles
-        )
-    elif provider == "triton":
-        ms, min_ms, max_ms = triton.testing.do_bench(
-            lambda: triton_add(lhs, rhs), quantiles=quantiles
-        )
+        if provider == "ninetoothed":
+            ms, min_ms, max_ms = triton.testing.do_bench(
+                lambda: add(lhs, rhs), quantiles=quantiles
+            )
+        elif provider == "torch":
+            ms, min_ms, max_ms = triton.testing.do_bench(
+                lambda: lhs + rhs, quantiles=quantiles
+            )
+        elif provider == "triton":
+            ms, min_ms, max_ms = triton.testing.do_bench(
+                lambda: triton_add(lhs, rhs), quantiles=quantiles
+            )
 
-    def gbps(ms):
-        return 3 * lhs.numel() * lhs.element_size() / ms * 1e-6
+        def gbps(ms):
+            return 3 * lhs.numel() * lhs.element_size() / ms * 1e-6
 
-    return gbps(ms), gbps(max_ms), gbps(min_ms)
+        return gbps(ms), gbps(max_ms), gbps(min_ms)
 
-
-benchmark.run(print_data=True, show_plots=True, save_path=".")
+    benchmark.run(print_data=True, show_plots=True, save_path=".")
