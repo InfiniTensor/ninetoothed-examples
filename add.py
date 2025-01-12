@@ -73,7 +73,7 @@ if __name__ == "__main__":
         print("✅ NineToothed and PyTorch match.")
     else:
         print("❌ NineToothed and PyTorch differ.")
-    if torch.allclose(ninetoothed_output, triton_output):
+    if torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0):
         print("✅ NineToothed and Triton match.")
     else:
         print("❌ NineToothed and Triton differ.")
