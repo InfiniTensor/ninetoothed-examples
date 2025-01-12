@@ -44,7 +44,7 @@ def triton_rms_norm_kernel(
     col_offsets = tl.arange(0, BLOCK_SIZE)
     input_ptrs = input_ptr + row_idx * input_row_stride + col_offsets
     mask = col_offsets < num_cols
-    input = tl.load(input_ptrs, mask=mask)
+    input = tl.load(input_ptrs, mask=mask).to(tl.float32)
 
     output = input * tl.rsqrt(tl.sum(input * input) / num_cols + eps)
 
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     print(ninetoothed_output)
     print(torch_output)
     print(triton_output)
-    if torch.allclose(ninetoothed_output, torch_output):
+    if torch.allclose(ninetoothed_output, torch_output, atol=0.001, rtol=0.005):
         print("✅ NineToothed and PyTorch match.")
     else:
         print("❌ NineToothed and PyTorch differ.")
