@@ -224,7 +224,8 @@ if __name__ == "__main__":
     @triton.testing.perf_report(
         triton.testing.Benchmark(
             x_names=["seq_len"],
-            x_vals=[2**i for i in range(10, 15)],
+            x_vals=[2**i for i in range(6, 16)],
+            x_log=True,
             line_arg="provider",
             line_vals=["ninetoothed", "torch", "triton"],
             line_names=["NineToothed", "PyTorch", "Triton"],

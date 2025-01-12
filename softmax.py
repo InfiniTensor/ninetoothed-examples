@@ -90,7 +90,8 @@ if __name__ == "__main__":
     @triton.testing.perf_report(
         triton.testing.Benchmark(
             x_names=["n"],
-            x_vals=[128 * i for i in range(2, 100)],
+            x_vals=[2**i for i in range(5, 15)],
+            x_log=True,
             line_arg="provider",
             line_vals=["ninetoothed", "torch", "triton"],
             line_names=["NineToothed", "PyTorch", "Triton"],

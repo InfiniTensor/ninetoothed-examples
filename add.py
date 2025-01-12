@@ -81,7 +81,7 @@ if __name__ == "__main__":
     @triton.testing.perf_report(
         triton.testing.Benchmark(
             x_names=["size"],
-            x_vals=[2**i for i in range(12, 28, 1)],
+            x_vals=[2**i for i in range(18, 28)],
             x_log=True,
             line_arg="provider",
             line_vals=["ninetoothed", "torch", "triton"],
