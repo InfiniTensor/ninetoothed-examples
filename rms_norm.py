@@ -102,6 +102,12 @@ if __name__ == "__main__":
     def benchmark(m, n, provider):
         input = torch.randn(m, n, dtype=torch.float16, device="cuda")
 
+        ninetoothed_output = rms_norm(input)
+        torch_output = F.rms_norm(input, input.shape[-1:])
+        triton_output = triton_rms_norm(input)
+        assert torch.allclose(ninetoothed_output, torch_output, atol=0.001, rtol=0.005)
+        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
+
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(lambda: rms_norm(input))
         elif provider == "torch":

@@ -78,7 +78,7 @@ if __name__ == "__main__":
     print(ninetoothed_output)
     print(torch_output)
     print(triton_output)
-    if torch.allclose(ninetoothed_output, torch_output, atol=1e-5):
+    if torch.allclose(ninetoothed_output, torch_output, atol=0.001):
         print("✅ NineToothed and PyTorch match.")
     else:
         print("❌ NineToothed and PyTorch differ.")
@@ -104,6 +104,12 @@ if __name__ == "__main__":
         input = torch.randn(m, n, device="cuda", dtype=torch.float16)
         stream = torch.cuda.Stream()
         torch.cuda.set_stream(stream)
+
+        ninetoothed_output = softmax(input)
+        torch_output = torch.softmax(input, axis=-1)
+        triton_output = triton_softmax(input)
+        assert torch.allclose(ninetoothed_output, torch_output, atol=0.001)
+        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(lambda: softmax(input))

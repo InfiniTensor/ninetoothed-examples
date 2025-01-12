@@ -242,6 +242,12 @@ if __name__ == "__main__":
         k = torch.randn(shape, dtype=dtype, device="cuda")
         v = torch.randn(shape, dtype=dtype, device="cuda")
 
+        ninetoothed_output = attention(q, k, v)
+        torch_output = F.scaled_dot_product_attention(q, k, v, scale=1)
+        triton_output = triton_attention(q, k, v)
+        assert torch.allclose(ninetoothed_output, torch_output, atol=0.025, rtol=0.025)
+        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
+
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(lambda: attention(q, k, v))
         elif provider == "torch":

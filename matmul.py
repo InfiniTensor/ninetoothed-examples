@@ -182,6 +182,12 @@ if __name__ == "__main__":
         rhs = torch.randn((k, n), device="cuda", dtype=torch.float16)
         quantiles = [0.5, 0.2, 0.8]
 
+        ninetoothed_output = matmul(lhs, rhs)
+        torch_output = torch.matmul(lhs, rhs)
+        triton_output = triton_matmul(lhs, rhs)
+        assert torch.allclose(ninetoothed_output, torch_output, atol=0.025, rtol=0.025)
+        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
+
         if provider == "ninetoothed":
             ms, min_ms, max_ms = triton.testing.do_bench(
                 lambda: matmul(lhs, rhs), quantiles=quantiles

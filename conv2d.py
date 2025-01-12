@@ -233,6 +233,12 @@ if __name__ == "__main__":
         input = torch.randn((n, c, h, w), dtype=dtype, device="cuda")
         filter = torch.randn((k, c, r, s), dtype=dtype, device="cuda")
 
+        ninetoothed_output = conv2d(input, filter)
+        torch_output = F.conv2d(input, filter)
+        triton_output = triton_conv2d(input, filter)
+        assert torch.allclose(ninetoothed_output, torch_output, atol=0.01, rtol=0.01)
+        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
+
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(lambda: conv2d(input, filter))
         elif provider == "torch":
