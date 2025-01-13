@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 plt.rcParams["figure.dpi"] = 600
 plt.rcParams["font.family"] = "JetBrains Mono"
@@ -37,3 +38,17 @@ ax.set_axisbelow(True)
 
 plt.show()
 plt.savefig("code-size-comparison.png")
+
+print(
+    pd.DataFrame(
+        {
+            "Kernel": kernels,
+            "Relative Code Size Change (%)": [
+                f"{ninetoothed_lines / triton_lines * 100:.2f}%"
+                for ninetoothed_lines, triton_lines in zip(
+                    lines_of_code["NineToothed"], lines_of_code["Triton"]
+                )
+            ],
+        }
+    )
+)
