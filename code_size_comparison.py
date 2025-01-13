@@ -42,12 +42,15 @@ plt.savefig("code-size-comparison.png")
 print(
     pd.DataFrame(
         {
-            "Kernel": kernels,
+            "Kernel": kernels + ("Overall",),
             "Relative Code Size Change (%)": [
                 f"{ninetoothed_lines / triton_lines * 100:.2f}%"
                 for ninetoothed_lines, triton_lines in zip(
                     lines_of_code["NineToothed"], lines_of_code["Triton"]
                 )
+            ]
+            + [
+                f"{sum(lines_of_code['NineToothed']) / sum(lines_of_code['Triton']) * 100:.2f}%"
             ],
         }
     )
