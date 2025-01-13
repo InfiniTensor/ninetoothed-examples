@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 plt.rcParams["figure.figsize"] = [12, 6]
@@ -61,6 +62,8 @@ num_cols = max(len(category.kernels) for category in categories)
 
 fig, axs = plt.subplots(num_rows, num_cols)
 
+performance_differences = []
+
 for row, category in enumerate(categories):
     axs[row, 0].set_ylabel(category.y_label)
 
@@ -70,10 +73,17 @@ for row, category in enumerate(categories):
 
         x = df.iloc[:, 0]
 
+        performance_differences.append((kernel, []))
+
         for provider in providers:
             y = df[provider]
 
             ax.plot(x, y, label=provider)
+
+            if provider == "NineToothed":
+                y_triton = df["Triton"]
+                diff = (y - y_triton) / y_triton * 100
+                performance_differences[-1][-1].append(diff)
 
             ax.set_title(kernel.name)
             ax.set_xlabel(kernel.independent_variable)
@@ -85,3 +95,28 @@ fig.subplots_adjust(top=0.9)
 
 plt.show()
 plt.savefig("performance-comparison.png")
+
+all_differences = []
+stats_data = []
+
+for kernel, diffs in performance_differences:
+    all_differences.extend(diffs)
+
+    kernel_stats = {
+        "Kernel": kernel.name,
+        "Mean": np.mean(diffs),
+        "Median": np.median(diffs),
+    }
+
+    stats_data.append(kernel_stats)
+
+overall_stats = {
+    "Kernel": "Overall",
+    "Mean": np.mean(all_differences),
+    "Median": np.median(all_differences),
+}
+
+stats_data.append(overall_stats)
+
+print("Relative Performance Change (%):")
+print(pd.DataFrame(stats_data))
