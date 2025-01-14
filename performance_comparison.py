@@ -28,7 +28,7 @@ kernels = (
     KernelInformation("attention", "attention-performance.csv", "Sequence Length"),
 )
 
-providers = ("Triton", "NineToothed")
+providers = ("Triton", "NineToothed", "PyTorch")
 
 num_rows = 2
 num_cols = 3
