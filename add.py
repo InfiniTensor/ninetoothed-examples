@@ -93,8 +93,8 @@ if __name__ == "__main__":
         )
     )
     def benchmark(size, provider):
-        lhs = torch.rand(size, device="cuda", dtype=torch.float16)
-        rhs = torch.rand(size, device="cuda", dtype=torch.float16)
+        lhs = torch.randn(size, device="cuda", dtype=torch.float16)
+        rhs = torch.randn(size, device="cuda", dtype=torch.float16)
         quantiles = [0.5, 0.2, 0.8]
 
         ninetoothed_output = add(lhs, rhs)
