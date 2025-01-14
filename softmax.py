@@ -103,8 +103,6 @@ if __name__ == "__main__":
     )
     def benchmark(m, n, provider):
         input = torch.randn(m, n, device="cuda", dtype=torch.float16)
-        stream = torch.cuda.Stream()
-        torch.cuda.set_stream(stream)
 
         ninetoothed_output = softmax(input)
         torch_output = torch.softmax(input, axis=-1)
