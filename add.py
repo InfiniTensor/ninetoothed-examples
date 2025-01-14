@@ -87,7 +87,7 @@ if __name__ == "__main__":
             line_vals=["ninetoothed", "torch", "triton"],
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-            ylabel="GB/s",
+            ylabel="ms",
             plot_name="vector-addition-performance",
             args={},
         )
@@ -95,7 +95,6 @@ if __name__ == "__main__":
     def benchmark(size, provider):
         lhs = torch.randn(size, device="cuda", dtype=torch.float16)
         rhs = torch.randn(size, device="cuda", dtype=torch.float16)
-        quantiles = [0.5, 0.2, 0.8]
 
         ninetoothed_output = add(lhs, rhs)
         torch_output = lhs + rhs
@@ -104,21 +103,12 @@ if __name__ == "__main__":
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
         if provider == "ninetoothed":
-            ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: add(lhs, rhs), quantiles=quantiles
-            )
+            ms = triton.testing.do_bench(lambda: add(lhs, rhs))
         elif provider == "torch":
-            ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: lhs + rhs, quantiles=quantiles
-            )
+            ms = triton.testing.do_bench(lambda: lhs + rhs)
         elif provider == "triton":
-            ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: triton_add(lhs, rhs), quantiles=quantiles
-            )
+            ms = triton.testing.do_bench(lambda: triton_add(lhs, rhs))
 
-        def gbps(ms):
-            return 3 * lhs.numel() * lhs.element_size() / ms * 1e-6
-
-        return gbps(ms), gbps(max_ms), gbps(min_ms)
+        return ms
 
     benchmark.run(print_data=True, show_plots=True, save_path=".")

@@ -96,7 +96,7 @@ if __name__ == "__main__":
             line_vals=["ninetoothed", "torch", "triton"],
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-            ylabel="GB/s",
+            ylabel="ms",
             plot_name="softmax-performance",
             args={"m": 4096},
         )
@@ -117,9 +117,6 @@ if __name__ == "__main__":
         elif provider == "triton":
             ms = triton.testing.do_bench(lambda: triton_softmax(input))
 
-        def gbps(ms):
-            return 2 * input.numel() * input.element_size() * 1e-6 / ms
-
-        return gbps(ms)
+        return ms
 
     benchmark.run(show_plots=True, print_data=True, save_path=".")

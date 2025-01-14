@@ -222,7 +222,7 @@ if __name__ == "__main__":
             line_vals=["ninetoothed", "torch", "triton"],
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-            ylabel="TFLOPS",
+            ylabel="ms",
             plot_name="2d-convolution-performance",
             args={},
         )
@@ -247,12 +247,6 @@ if __name__ == "__main__":
         elif provider == "triton":
             ms = triton.testing.do_bench(lambda: triton_conv2d(input, filter))
 
-        def perf(ms):
-            p = h - r + 1
-            q = w - s + 1
-
-            return 2 * n * k * p * q * c * r * s * 1e-12 / (ms * 1e-3)
-
-        return perf(ms)
+        return ms
 
     benchmark.run(show_plots=True, print_data=True, save_path=".")

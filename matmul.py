@@ -173,7 +173,7 @@ if __name__ == "__main__":
             line_vals=["ninetoothed", "torch", "triton"],
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-            ylabel="TFLOPS",
+            ylabel="ms",
             plot_name="matrix-multiplication-performance",
             args={},
         )
@@ -181,7 +181,6 @@ if __name__ == "__main__":
     def benchmark(m, n, k, provider):
         lhs = torch.randn((m, k), device="cuda", dtype=torch.float16)
         rhs = torch.randn((k, n), device="cuda", dtype=torch.float16)
-        quantiles = [0.5, 0.2, 0.8]
 
         ninetoothed_output = matmul(lhs, rhs)
         torch_output = torch.matmul(lhs, rhs)
@@ -190,21 +189,12 @@ if __name__ == "__main__":
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
         if provider == "ninetoothed":
-            ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: matmul(lhs, rhs), quantiles=quantiles
-            )
+            ms = triton.testing.do_bench(lambda: matmul(lhs, rhs))
         elif provider == "torch":
-            ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: torch.matmul(lhs, rhs), quantiles=quantiles
-            )
+            ms = triton.testing.do_bench(lambda: torch.matmul(lhs, rhs))
         elif provider == "triton":
-            ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: triton_matmul(lhs, rhs), quantiles=quantiles
-            )
+            ms = triton.testing.do_bench(lambda: triton_matmul(lhs, rhs))
 
-        def perf(ms):
-            return 2 * m * n * k * 1e-12 / (ms * 1e-3)
-
-        return perf(ms), perf(max_ms), perf(min_ms)
+        return ms
 
     benchmark.run(show_plots=True, print_data=True, save_path=".")

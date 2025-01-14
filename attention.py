@@ -230,7 +230,7 @@ if __name__ == "__main__":
             line_vals=["ninetoothed", "torch", "triton"],
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-            ylabel="TFLOPS",
+            ylabel="ms",
             plot_name="attention-performance",
             args={},
         )
@@ -258,12 +258,6 @@ if __name__ == "__main__":
         elif provider == "triton":
             ms = triton.testing.do_bench(lambda: triton_attention(q, k, v))
 
-        def perf(ms):
-            flops_per_matmul = 2 * batch_size * num_heads * seq_len * seq_len * emb_dim
-            total_flops = 2 * flops_per_matmul
-
-            return total_flops * 1e-12 / (ms * 1e-3)
-
-        return perf(ms)
+        return ms
 
     benchmark.run(show_plots=True, print_data=True, save_path=".")
