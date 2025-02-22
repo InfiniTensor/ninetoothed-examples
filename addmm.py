@@ -239,6 +239,7 @@ def triton_addmm(input, mat1, mat2, beta=1, alpha=1):
 
 
 if __name__ == "__main__":
+    random.seed(0)
     torch.manual_seed(0)
     shape = (512, 512)
     input = torch.randn(shape, dtype=torch.float16, device="cuda")
