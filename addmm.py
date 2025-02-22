@@ -299,7 +299,7 @@ if __name__ == "__main__":
             )
 
         def perf(ms):
-            return 2 * m * n * k * 1e-12 / (ms * 1e-3)
+            return (2 * m * n * k + 3 * m * n) * 1e-12 / (ms * 1e-3)
 
         return perf(ms), perf(max_ms), perf(min_ms)
 
