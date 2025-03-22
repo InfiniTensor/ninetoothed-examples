@@ -1,3 +1,5 @@
+import math
+
 import ninetoothed
 import ninetoothed.language as ntl
 import torch
@@ -7,7 +9,7 @@ import triton.language as tl
 from ninetoothed import Symbol, Tensor
 
 
-def arrangement(q, k, v, o):
+def arrangement(q, k, v, scale, o):
     BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
     BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
 
@@ -30,11 +32,11 @@ def arrangement(q, k, v, o):
 
     q_arranged = arrange_q_or_o(q)
 
-    return q_arranged, arrange_k_or_v(k), arrange_k_or_v(v), arrange_q_or_o(o)
+    return q_arranged, arrange_k_or_v(k), arrange_k_or_v(v), scale, arrange_q_or_o(o)
 
 
-def application(q, k, v, o):
-    q_loaded = (q * 1.44269504089).to(ntl.float16)
+def application(q, k, v, scale, o):
+    q_loaded = (q * scale * 1.44269504089).to(ntl.float16)
 
     acc = ntl.zeros((q.shape[-2], q.shape[-1]), dtype=ntl.float32)
     l_i = ntl.full((q.shape[-2],), 1, dtype=ntl.float32)
@@ -57,13 +59,16 @@ def application(q, k, v, o):
 
 
 q, k, v, o = (Tensor(4, constexpr_shape=True) for _ in range(4))
-attention_kernel = ninetoothed.make(arrangement, application, (q, k, v, o))
+attention_kernel = ninetoothed.make(arrangement, application, (q, k, v, Tensor(0), o))
 
 
-def attention(q, k, v):
+def attention(q, k, v, scale=None):
+    if scale is None:
+        scale = 1 / math.sqrt(q.shape[-1])
+
     o = torch.empty_like(q, dtype=v.dtype)
 
-    attention_kernel(q, k, v, o)
+    attention_kernel(q, k, v, scale, o)
 
     return o
 
@@ -113,6 +118,7 @@ def triton_attention_kernel(
     o_stride_h,
     o_stride_m,
     o_stride_n,
+    scale,
     SEQ_LEN: tl.constexpr,
     EMB_DIM: tl.constexpr,
     BLOCK_SIZE_M: tl.constexpr,
@@ -161,7 +167,7 @@ def triton_attention_kernel(
         order=(1, 0),
     )
 
-    q = (tl.load(q_block_ptr) * 1.44269504089).to(q_block_ptr.type.element_ty)
+    q = (tl.load(q_block_ptr) * scale * 1.44269504089).to(q_block_ptr.type.element_ty)
 
     acc = tl.zeros((BLOCK_SIZE_M, EMB_DIM), dtype=tl.float32)
     l_i = tl.full((BLOCK_SIZE_M,), 1, dtype=tl.float32)
@@ -191,10 +197,13 @@ def triton_attention_kernel(
     tl.store(o_block_ptr, acc.to(o_ptr.type.element_ty))
 
 
-def triton_attention(q, k, v):
+def triton_attention(q, k, v, scale=None):
     o = torch.empty_like(q)
 
     batch_size, num_heads, seq_len, emb_dim = q.shape
+
+    if scale is None:
+        scale = 1 / math.sqrt(emb_dim)
 
     def grid(meta):
         return (
@@ -212,6 +221,7 @@ def triton_attention(q, k, v):
         *k.stride(),
         *v.stride(),
         *o.stride(),
+        scale=scale,
         SEQ_LEN=seq_len,
         EMB_DIM=emb_dim,
     )
@@ -228,7 +238,7 @@ if __name__ == "__main__":
     v = torch.randn(shape, dtype=dtype, device="cuda")
 
     ninetoothed_output = attention(q, k, v)
-    torch_output = F.scaled_dot_product_attention(q, k, v, scale=1)
+    torch_output = F.scaled_dot_product_attention(q, k, v)
     triton_output = triton_attention(q, k, v)
     print(ninetoothed_output)
     print(torch_output)
