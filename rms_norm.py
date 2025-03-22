@@ -35,8 +35,7 @@ class RMSNorm(nn.Module):
     def __init__(self, other):
         super().__init__()
 
-        self.weight = other.weight
-        self.variance_epsilon = other.variance_epsilon
+        self.__dict__ = other.__dict__
 
     def forward(self, x):
         return fused_rms_norm(x, self.weight, self.variance_epsilon)
