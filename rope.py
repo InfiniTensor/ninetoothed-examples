@@ -3,21 +3,26 @@ import torch
 from ninetoothed import Tensor
 
 
-def arrangement(tensor, sin_table, cos_table):
+def arrangement(tensor, sin_table, cos_table, interleaved=True):
     emb_dim = tensor.shape[-1]
-    half_emb_dim = emb_dim // 2
+    tile_shape = (1, 1, 1, emb_dim // 2)
 
-    tensor_arranged = tensor.tile(
-        (1, 1, 1, half_emb_dim), strides=(-1, -1, -1, 1), dilation=(1, 1, 1, 2)
-    )
+    if interleaved:
+        strides = (-1, -1, -1, 1)
+        dilation = (1, 1, 1, 2)
+    else:
+        strides = None
+        dilation = None
+
+    tensor_arranged = tensor.tile(tile_shape, strides=strides, dilation=dilation)
     tensor_arranged = tensor_arranged.tile((1, 1, 1, 2))
     tensor_arranged.dtype = tensor_arranged.dtype.squeeze((0, 1, 2))
     tensor_arranged.dtype.dtype = tensor_arranged.dtype.dtype.squeeze((0, 1, 2))
 
-    sin_table_arranged = sin_table.tile((1, 1, 1, half_emb_dim))
+    sin_table_arranged = sin_table.tile(tile_shape)
     sin_table_arranged.dtype = sin_table_arranged.dtype.squeeze((0, 1, 2))
 
-    cos_table_arranged = cos_table.tile((1, 1, 1, half_emb_dim))
+    cos_table_arranged = cos_table.tile(tile_shape)
     cos_table_arranged.dtype = cos_table_arranged.dtype.squeeze((0, 1, 2))
 
     return tensor_arranged, sin_table_arranged, cos_table_arranged
