@@ -2,6 +2,7 @@ import argparse
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from attention import Attention
 from rms_norm import RMSNorm
 from utils import replace_module
 
@@ -49,6 +50,7 @@ if __name__ == "__main__":
     tokenizer.pad_token = tokenizer.eos_token
     model.generation_config.pad_token_id = tokenizer.pad_token_id
 
+    replace_module(model, Attention)
     replace_module(model, RMSNorm)
 
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(device)
