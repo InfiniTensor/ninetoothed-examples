@@ -6,3 +6,12 @@ def replace_module(module, replacement_class):
 
         replacement = replacement_class(child_module)
         setattr(module, child_name, replacement)
+
+
+def find_module_types(module):
+    types = {type(module)}
+
+    for child_module in module.children():
+        types.update(find_module_types(child_module))
+
+    return types
