@@ -1,5 +1,7 @@
 import ninetoothed
 import torch
+import triton
+import triton.language as tl
 from ninetoothed import Tensor
 
 
@@ -54,6 +56,84 @@ def rope(tensor, sin_table, cos_table):
     return tensor_cloned
 
 
+@triton.jit
+def triton_rope_kernel(
+    tensor_ptr,
+    sin_table_ptr,
+    cos_table_ptr,
+    tensor_stride_n,
+    tensor_stride_l,
+    tensor_stride_h,
+    tensor_stride_e,
+    sin_table_stride_l,
+    cos_table_stride_l,
+    emb_dim,
+    BLOCK_SIZE: tl.constexpr,
+):
+    off_n = tl.program_id(0)
+    off_l = tl.program_id(1)
+    off_h = tl.program_id(2)
+
+    offs = tl.arange(0, BLOCK_SIZE)
+
+    half_emb_dim = emb_dim // 2
+    mask = offs < half_emb_dim
+
+    sin_table = tl.load(sin_table_ptr + off_l * sin_table_stride_l + offs, mask=mask)
+    cos_table = tl.load(cos_table_ptr + off_l * cos_table_stride_l + offs, mask=mask)
+
+    even_offs = (
+        off_n * tensor_stride_n
+        + off_l * tensor_stride_l
+        + off_h * tensor_stride_h
+        + (2 * offs) * tensor_stride_e
+    )
+    odd_offs = (
+        off_n * tensor_stride_n
+        + off_l * tensor_stride_l
+        + off_h * tensor_stride_h
+        + (2 * offs + 1) * tensor_stride_e
+    )
+
+    even_ptrs = tensor_ptr + even_offs
+    odd_ptrs = tensor_ptr + odd_offs
+
+    even = tl.load(even_ptrs, mask=mask)
+    odd = tl.load(odd_ptrs, mask=mask)
+
+    tl.store(even_ptrs, even * cos_table - odd * sin_table, mask=mask)
+    tl.store(odd_ptrs, even * sin_table + odd * cos_table, mask=mask)
+
+
+def triton_rope(
+    tensor: torch.Tensor, sin_table: torch.Tensor, cos_table: torch.Tensor
+) -> torch.Tensor:
+    batch_size, seq_len, num_heads, emb_dim = tensor.shape
+
+    assert emb_dim % 2 == 0, "The embedding dimension must be even."
+
+    BLOCK_SIZE = triton.next_power_of_2(emb_dim // 2)
+    if BLOCK_SIZE > 1024:
+        BLOCK_SIZE = 1024
+
+    grid = (batch_size, seq_len, num_heads)
+
+    tensor_cloned = tensor.clone()
+
+    triton_rope_kernel[grid](
+        tensor_cloned,
+        sin_table,
+        cos_table,
+        *tensor.stride(),
+        sin_table.stride(0),
+        cos_table.stride(0),
+        emb_dim,
+        BLOCK_SIZE=BLOCK_SIZE,
+    )
+
+    return tensor_cloned
+
+
 def torch_rope(input, sin_table, cos_table):
     batch_size, seq_len, num_heads, emb_dim = input.shape
 
@@ -97,9 +177,15 @@ if __name__ == "__main__":
     x = torch.randn(batch_size, seq_len, num_heads, emb_dim, dtype=dtype, device=device)
     ninetoothed_output = rope(x, sin_table, cos_table)
     torch_output = torch_rope(x, sin_table, cos_table)
+    triton_output = triton_rope(x, sin_table, cos_table)
     print(ninetoothed_output)
     print(torch_output)
+    print(triton_output)
     if torch.allclose(ninetoothed_output, torch_output, atol=0.001):
         print("✅ NineToothed and PyTorch match.")
     else:
         print("❌ NineToothed and PyTorch differ.")
+    if torch.allclose(ninetoothed_output, triton_output):
+        print("✅ NineToothed and Triton match.")
+    else:
+        print("❌ NineToothed and Triton differ.")
