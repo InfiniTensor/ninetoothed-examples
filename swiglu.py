@@ -126,8 +126,8 @@ if __name__ == "__main__":
 
     @triton.testing.perf_report(
         triton.testing.Benchmark(
-            x_names=["size"],
-            x_vals=[2**i for i in range(12, 28, 1)],
+            x_names=["m", "n"],
+            x_vals=[128 * i for i in range(2, 50)],
             x_log=True,
             line_arg="provider",
             line_vals=["ninetoothed", "torch", "triton"],
@@ -138,11 +138,13 @@ if __name__ == "__main__":
             args={},
         )
     )
-    def benchmark(size, provider):
+    def benchmark(m, n, provider):
+        shape = (m, n)
         dtype = torch.float16
         device = "cuda"
-        a = torch.rand(size, dtype=dtype, device=device)
-        b = torch.rand(size, dtype=dtype, device=device)
+
+        a = torch.rand(shape, dtype=dtype, device=device)
+        b = torch.rand(shape, dtype=dtype, device=device)
         quantiles = [0.5, 0.2, 0.8]
 
         if provider == "ninetoothed":
