@@ -189,3 +189,43 @@ if __name__ == "__main__":
         print("✅ NineToothed and Triton match.")
     else:
         print("❌ NineToothed and Triton differ.")
+
+    @triton.testing.perf_report(
+        triton.testing.Benchmark(
+            x_names=["seq_len"],
+            x_vals=[2**i for i in range(5, 15)],
+            line_arg="provider",
+            line_vals=["ninetoothed", "torch", "triton"],
+            line_names=["NineToothed", "PyTorch", "Triton"],
+            styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
+            ylabel="GB/s",
+            plot_name="rope-performance",
+            args={},
+        )
+    )
+    def benchmark(seq_len, provider):
+        batch_size, num_heads, emb_dim = 4, 32, 64
+        shape = (batch_size, seq_len, num_heads, emb_dim)
+        dtype = torch.float16
+        device = "cuda"
+
+        x = torch.randn(shape, dtype=dtype, device=device)
+        sin_table, cos_table = _generate_sin_and_cos_tables(seq_len, emb_dim)
+
+        if provider == "ninetoothed":
+            ms = triton.testing.do_bench(lambda: rope(x, sin_table, cos_table))
+        elif provider == "torch":
+            ms = triton.testing.do_bench(lambda: torch_rope(x, sin_table, cos_table))
+        elif provider == "triton":
+            ms = triton.testing.do_bench(lambda: triton_rope(x, sin_table, cos_table))
+
+        def gbps(ms):
+            x_bytes = x.numel() * x.element_size()
+            sin_table_bytes = sin_table.numel() * sin_table.element_size()
+            cos_table_bytes = cos_table.numel() * cos_table.element_size()
+
+            return (x_bytes + sin_table_bytes + cos_table_bytes) / ms * 1e-6
+
+        return gbps(ms)
+
+    benchmark.run(show_plots=True, print_data=True, save_path=".")
