@@ -16,8 +16,8 @@ def swiglu_kernel(
     b: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
     c: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
 ):
-    magic = b
-    gate = magic * ntl.sigmoid(ntl.cast(magic, ntl.float32))
+    b_loaded = b
+    gate = b_loaded * ntl.sigmoid(ntl.cast(b_loaded, ntl.float32))
     c = a * gate  # noqa: F841
 
 
@@ -34,28 +34,28 @@ def triton_swiglu_kernel(
     a_ptr,
     b_ptr,
     c_ptr,
-    M,
-    N,
-    stride_am,
-    stride_an,
-    stride_bm,
-    stride_bn,
-    stride_cm,
-    stride_cn,
+    m,
+    n,
+    a_stride_m,
+    a_stride_n,
+    b_stride_m,
+    b_stride_n,
+    c_stride_m,
+    c_stride_n,
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(0)
     block_start = pid * BLOCK_SIZE
     offsets = block_start + tl.arange(0, BLOCK_SIZE)
 
-    rows = offsets // N
-    cols = offsets % N
+    rows = offsets // n
+    cols = offsets % n
 
-    mask = (rows < M) & (cols < N)
+    mask = (rows < m) & (cols < n)
 
-    a_offsets = rows * stride_am + cols * stride_an
-    b_offsets = rows * stride_bm + cols * stride_bn
-    c_offsets = rows * stride_cm + cols * stride_cn
+    a_offsets = rows * a_stride_m + cols * a_stride_n
+    b_offsets = rows * b_stride_m + cols * b_stride_n
+    c_offsets = rows * c_stride_m + cols * c_stride_n
 
     a = tl.load(a_ptr + a_offsets, mask=mask, other=0.0)
     b = tl.load(b_ptr + b_offsets, mask=mask, other=0.0)
@@ -87,6 +87,7 @@ def triton_swiglu(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         c.stride(1),
         BLOCK_SIZE=1024,
     )
+
     return c
 
 
@@ -101,9 +102,11 @@ if __name__ == "__main__":
     torch.manual_seed(0)
 
     shape = (13, 3)
-    a = torch.rand(shape, device="cuda", dtype=torch.float16)
-    b = torch.rand(shape, device="cuda", dtype=torch.float16)
-    c = torch.rand(shape, device="cuda", dtype=torch.float16)
+    dtype = torch.float16
+    device = "cuda"
+    a = torch.rand(shape, dtype=dtype, device=device)
+    b = torch.rand(shape, dtype=dtype, device=device)
+    c = torch.rand(shape, dtype=dtype, device=device)
 
     ninetoothed_output = ninetoothed_swiglu(a, b)
     torch_output = torch_swiglu(a, b)
@@ -131,13 +134,15 @@ if __name__ == "__main__":
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
             ylabel="GB/s",
-            plot_name="vector-addition-performance",
+            plot_name="swiglu-performance",
             args={},
         )
     )
     def benchmark(size, provider):
-        a = torch.rand(size, device="cuda", dtype=torch.float16)
-        b = torch.rand(size, device="cuda", dtype=torch.float16)
+        dtype = torch.float16
+        device = "cuda"
+        a = torch.rand(size, dtype=dtype, device=device)
+        b = torch.rand(size, dtype=dtype, device=device)
         quantiles = [0.5, 0.2, 0.8]
 
         if provider == "ninetoothed":
