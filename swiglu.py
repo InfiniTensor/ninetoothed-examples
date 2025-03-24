@@ -1,9 +1,9 @@
-import torch
-import triton
 import ninetoothed
-import triton.language as tl
 import ninetoothed.language as ntl
+import torch
 import torch.nn.functional as F
+import triton
+import triton.language as tl
 from ninetoothed import Symbol, Tensor
 
 BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
@@ -18,7 +18,7 @@ def swiglu_kernel(
 ):
     magic = b
     gate = magic * ntl.sigmoid(ntl.cast(magic, ntl.float32))
-    c = a * gate
+    c = a * gate  # noqa: F841
 
 
 def ninetoothed_swiglu(a, b):
@@ -70,7 +70,8 @@ def triton_swiglu(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     m, n = a.shape
     c = torch.empty_like(a)
 
-    grid = lambda meta: (triton.cdiv(m * n, meta["BLOCK_SIZE"]),)
+    def grid(meta):
+        return (triton.cdiv(m * n, meta["BLOCK_SIZE"]),)
 
     triton_swiglu_kernel[grid](
         a,
