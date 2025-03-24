@@ -6,8 +6,8 @@ import ninetoothed.language as ntl
 import torch.nn.functional as F
 from ninetoothed import Symbol, Tensor
 
-BLOCK_SIZE_M = 1#Symbol("BLOCK_SIZE_M", meta=True)
-BLOCK_SIZE_N = 128#Symbol("BLOCK_SIZE_N", meta=True)
+BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
+BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
 
 
 @ninetoothed.jit
@@ -29,50 +29,62 @@ def ninetoothed_swiglu(a, b):
     return c
 
 
-
 @triton.jit
 def triton_swiglu_kernel(
-    a_ptr, b_ptr, c_ptr,
-    M, N,
-    stride_am, stride_an,
-    stride_bm, stride_bn,
-    stride_cm, stride_cn,
+    a_ptr,
+    b_ptr,
+    c_ptr,
+    M,
+    N,
+    stride_am,
+    stride_an,
+    stride_bm,
+    stride_bn,
+    stride_cm,
+    stride_cn,
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(0)
     block_start = pid * BLOCK_SIZE
     offsets = block_start + tl.arange(0, BLOCK_SIZE)
-    
+
     rows = offsets // N
     cols = offsets % N
 
     mask = (rows < M) & (cols < N)
-    
+
     a_offsets = rows * stride_am + cols * stride_an
     b_offsets = rows * stride_bm + cols * stride_bn
     c_offsets = rows * stride_cm + cols * stride_cn
-    
+
     a = tl.load(a_ptr + a_offsets, mask=mask, other=0.0)
     b = tl.load(b_ptr + b_offsets, mask=mask, other=0.0)
-    
+
     silu_b = b * tl.sigmoid(tl.cast(b, tl.float32))
     c = a * silu_b
-    
+
     tl.store(c_ptr + c_offsets, c, mask=mask)
+
 
 def triton_swiglu(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     m, n = a.shape
     c = torch.empty_like(a)
-    
-    grid = lambda meta: (triton.cdiv(m * n, meta['BLOCK_SIZE']), )
-    
+
+    grid = lambda meta: (triton.cdiv(m * n, meta["BLOCK_SIZE"]),)
+
     triton_swiglu_kernel[grid](
-        a, b, c,
-        m, n,
-        a.stride(0), a.stride(1),
-        b.stride(0), b.stride(1),
-        c.stride(0), c.stride(1),
-        BLOCK_SIZE=1024
+        a,
+        b,
+        c,
+        m,
+        n,
+        a.stride(0),
+        a.stride(1),
+        b.stride(0),
+        b.stride(1),
+        c.stride(0),
+        c.stride(1),
+        BLOCK_SIZE=1024,
     )
     return c
 
@@ -81,7 +93,6 @@ def torch_swiglu(
     a: torch.Tensor,
     b: torch.Tensor,
 ) -> torch.Tensor:
-    
     return a * F.silu(b)
 
 
@@ -108,7 +119,6 @@ if __name__ == "__main__":
         print("✅ NineToothed and Triton match.")
     else:
         print("❌ NineToothed and Triton differ.")
-
 
     @triton.testing.perf_report(
         triton.testing.Benchmark(
@@ -146,6 +156,5 @@ if __name__ == "__main__":
             return 3 * a.numel() * a.element_size() / ms * 1e-6
 
         return gbps(ms), gbps(max_ms), gbps(min_ms)
-
 
     benchmark.run(print_data=True, show_plots=True, save_path=".")
