@@ -5,6 +5,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from attention import Attention
 from linear import Linear
 from rms_norm import RMSNorm
+from silu import SiLU
 from utils import replace_module
 
 if __name__ == "__main__":
@@ -54,6 +55,7 @@ if __name__ == "__main__":
     replace_module(model, Attention)
     replace_module(model, Linear)
     replace_module(model, RMSNorm)
+    replace_module(model, SiLU)
 
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(device)
     outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
