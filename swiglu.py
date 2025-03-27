@@ -6,15 +6,14 @@ import triton
 import triton.language as tl
 from ninetoothed import Symbol, Tensor
 
-BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
-BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
+BLOCK_SIZE = Symbol("BLOCK_SIZE", meta=True)
 
 
 @ninetoothed.jit
 def swiglu_kernel(
-    a: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
-    b: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
-    c: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
+    a: Tensor(1).tile((BLOCK_SIZE,)),
+    b: Tensor(1).tile((BLOCK_SIZE,)),
+    c: Tensor(1).tile((BLOCK_SIZE,)),
 ):
     b_loaded = b
     gate = b_loaded * ntl.sigmoid(ntl.cast(b_loaded, ntl.float32))
@@ -22,11 +21,14 @@ def swiglu_kernel(
 
 
 def ninetoothed_swiglu(a, b):
-    c = torch.empty_like(a)
+    a_1d = a.flatten()
+    b_1d = b.flatten()
 
-    swiglu_kernel(a, b, c)
+    c = torch.empty_like(a_1d)
 
-    return c
+    swiglu_kernel(a_1d, b_1d, c)
+
+    return c.view_as(a)
 
 
 @triton.jit
@@ -34,61 +36,41 @@ def triton_swiglu_kernel(
     a_ptr,
     b_ptr,
     c_ptr,
-    m,
-    n,
-    a_stride_m,
-    a_stride_n,
-    b_stride_m,
-    b_stride_n,
-    c_stride_m,
-    c_stride_n,
+    data_size: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(0)
-    block_start = pid * BLOCK_SIZE
-    offsets = block_start + tl.arange(0, BLOCK_SIZE)
+    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < data_size
 
-    rows = offsets // n
-    cols = offsets % n
-
-    mask = (rows < m) & (cols < n)
-
-    a_offsets = rows * a_stride_m + cols * a_stride_n
-    b_offsets = rows * b_stride_m + cols * b_stride_n
-    c_offsets = rows * c_stride_m + cols * c_stride_n
-
-    a = tl.load(a_ptr + a_offsets, mask=mask, other=0.0)
-    b = tl.load(b_ptr + b_offsets, mask=mask, other=0.0)
+    a = tl.load(a_ptr + offsets, mask=mask, other=0.0)
+    b = tl.load(b_ptr + offsets, mask=mask, other=0.0)
 
     silu_b = b * tl.sigmoid(tl.cast(b, tl.float32))
     c = a * silu_b
 
-    tl.store(c_ptr + c_offsets, c, mask=mask)
+    tl.store(c_ptr + offsets, c, mask=mask)
 
 
 def triton_swiglu(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    m, n = a.shape
-    c = torch.empty_like(a)
+    # Flatten the inputs so that the kernel always works on 1D tensors
+    a_flat = a.flatten()
+    b_flat = b.flatten()
+    c_flat = torch.empty_like(a_flat)
+    data_size = a_flat.numel()
 
     def grid(meta):
-        return (triton.cdiv(m * n, meta["BLOCK_SIZE"]),)
+        return (triton.cdiv(data_size, meta["BLOCK_SIZE"]),)
 
     triton_swiglu_kernel[grid](
-        a,
-        b,
-        c,
-        m,
-        n,
-        a.stride(0),
-        a.stride(1),
-        b.stride(0),
-        b.stride(1),
-        c.stride(0),
-        c.stride(1),
+        a_flat,
+        b_flat,
+        c_flat,
+        data_size,
         BLOCK_SIZE=1024,
     )
 
-    return c
+    return c_flat.view_as(a)
 
 
 def torch_swiglu(
