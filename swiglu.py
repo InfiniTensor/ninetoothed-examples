@@ -21,8 +21,8 @@ def swiglu_kernel(
 
 
 def ninetoothed_swiglu(a, b):
-    a_1d = a.view(-1)
-    b_1d = b.view(-1)
+    a_1d = a.flatten()
+    b_1d = b.flatten()
 
     c = torch.empty_like(a_1d)
 
