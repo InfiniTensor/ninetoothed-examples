@@ -6,15 +6,14 @@ import triton
 import triton.language as tl
 from ninetoothed import Symbol, Tensor
 
-BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
-BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
+BLOCK_SIZE = Symbol("BLOCK_SIZE", meta=True)
 
 
 @ninetoothed.jit
 def swiglu_kernel(
-    a: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
-    b: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
-    c: Tensor(2).tile((BLOCK_SIZE_M, BLOCK_SIZE_N)),
+    a: Tensor(1).tile((BLOCK_SIZE,)),
+    b: Tensor(1).tile((BLOCK_SIZE,)),
+    c: Tensor(1).tile((BLOCK_SIZE,)),
 ):
     b_loaded = b
     gate = b_loaded * ntl.sigmoid(ntl.cast(b_loaded, ntl.float32))
@@ -22,11 +21,14 @@ def swiglu_kernel(
 
 
 def ninetoothed_swiglu(a, b):
-    c = torch.empty_like(a)
+    a_1d = a.view(-1)
+    b_1d = b.view(-1)
 
-    swiglu_kernel(a, b, c)
+    c = torch.empty_like(a_1d)
 
-    return c
+    swiglu_kernel(a_1d, b_1d, c)
+
+    return c.view_as(a)
 
 
 @triton.jit
