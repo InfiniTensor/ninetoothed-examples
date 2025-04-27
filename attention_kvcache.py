@@ -4,18 +4,21 @@ import torch
 import torch.nn.functional as F
 import triton
 import triton.language as tl
-from ninetoothed import Symbol, Tensor, visualization
+from ninetoothed import Symbol, Tensor
 
 
 def arrangement(
     q, k, v, k_cache_start, k_cache_end, v_cache_start, v_cache_end, causal_mask, o
 ):
-    BLOCK_SIZE_M = 64  # Symbol("BLOCK_SIZE_M", meta=True)
-    BLOCK_SIZE_N = 32  # Symbol("BLOCK_SIZE_N", meta=True)
+    BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
+    BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
 
     def arrange_q_or_o(input):
-        arranged = input.tile((1, 1, BLOCK_SIZE_M, -1))
-        arranged.dtype = arranged.dtype.squeeze((0, 1))
+        arranged = input.tile((1, 1, BLOCK_SIZE_M, -1)).tile(
+            (1, q.shape[-3] // k_cache_start.shape[-3], 1, 1)
+        )
+        arranged.dtype = arranged.dtype.squeeze((0, 2, 3))
+        arranged.dtype.dtype = arranged.dtype.dtype.squeeze((0, 1))
 
         return arranged
 
@@ -45,8 +48,6 @@ def arrangement(
 
     q_arranged = arrange_q_or_o(q)
 
-    # visualization.visualize(mask_ar, save_path="mask.png")
-
     return (
         q_arranged,
         arrange_cache_end_or_kv(k),
@@ -66,26 +67,29 @@ def application(
     k_cache_end = k  # noqa: F841
     v_cache_end = v  # noqa: F841
 
-    q_loaded = (q * 1.44269504089).to(ntl.float16)
+    for i in range(q.shape[0]):
+        q_loaded = (q[i] * 1.44269504089).to(q[i].dtype)
 
-    acc = ntl.zeros((q.shape[-2], q.shape[-1]), dtype=ntl.float32)
-    l_i = ntl.full((q.shape[-2],), 1, dtype=ntl.float32)
-    m_i = ntl.full((q.shape[-2],), float("-inf"), dtype=ntl.float32)
+        acc = ntl.zeros((q_loaded.shape[-2], q_loaded.shape[-1]), dtype=ntl.float32)
+        l_i = ntl.full((q_loaded.shape[-2],), 1, dtype=ntl.float32)
+        m_i = ntl.full((q_loaded.shape[-2],), float("-inf"), dtype=ntl.float32)
 
-    for i in range(k_cache_start.shape[0]):
-        qk = ntl.dot(q_loaded, ntl.trans(k_cache_start[i])) + causal_mask[i]
+        for j in range(k_cache_start.shape[0]):
+            qk = ntl.dot(q_loaded, ntl.trans(k_cache_start[j])) + causal_mask[j]
 
-        m_ij = ntl.maximum(m_i, ntl.max(qk, 1))
-        p = ntl.exp2(qk - m_ij[:, None])
-        l_ij = ntl.sum(p, 1)
+            m_ij = ntl.maximum(m_i, ntl.max(qk, 1))
+            p = ntl.exp2(qk - m_ij[:, None])
+            l_ij = ntl.sum(p, 1)
 
-        alpha = ntl.exp2(m_i - m_ij)
-        acc = acc * alpha[:, None] + ntl.dot(p.to(ntl.float16), v_cache_start[i])
-        m_i = m_ij
-        l_i = l_i * alpha + l_ij
+            alpha = ntl.exp2(m_i - m_ij)
+            acc = acc * alpha[:, None] + ntl.dot(
+                p.to(v_cache_start[i].dtype), v_cache_start[j]
+            )
+            m_i = m_ij
+            l_i = l_i * alpha + l_ij
 
-    acc /= l_i[:, None]
-    o = acc  # noqa: F841
+        acc /= l_i[:, None]
+        o[i] = acc  # noqa: F841
 
 
 q, k, v, k_cache_start, k_cache_end, v_cache_start, v_cache_end, causal_mask, o = (
@@ -263,14 +267,13 @@ def triton_attention(q, k, v):
 
 if __name__ == "__main__":
     torch.manual_seed(0)
-    shape = (2, 4, 32, 64)
-    # cache_shape = shape[:-2] + (shape[-2]-1,) + shape[-1:]
-    # k_v_shape = shape[:-2] + (1,) + shape[-1:]
+    shape = (2, 4, 1024, 64)
+    k_v_shape = (2, 1, 1024, 64)
     dtype = torch.float16
 
     q = torch.randn(shape, dtype=dtype, device="cuda")
-    complete_k = torch.randn(shape, dtype=dtype, device="cuda")
-    complete_v = torch.randn(shape, dtype=dtype, device="cuda")
+    complete_k = torch.randn(k_v_shape, dtype=dtype, device="cuda")
+    complete_v = torch.randn(k_v_shape, dtype=dtype, device="cuda")
 
     def create_cache_and_end_slice(complete_tensor):
         cache = complete_tensor.clone()
@@ -278,7 +281,7 @@ if __name__ == "__main__":
         cache_end[...] = 0
         end_slice = complete_tensor[:, :, -1:, :]
         return cache, cache_end, end_slice
-    
+
     def create_causal_mask(shape):
         mask_shape = shape[:-1] + (shape[-2],)
         return torch.triu(
@@ -287,21 +290,21 @@ if __name__ == "__main__":
         )
 
     k_cache, k_cache_end, k = create_cache_and_end_slice(complete_k)
-    v_cache, v_cache_end, v = create_cache_and_end_slice(complete_v)    
-    causal_mask = create_causal_mask(shape)
+    v_cache, v_cache_end, v = create_cache_and_end_slice(complete_v)
+    causal_mask = create_causal_mask(k_v_shape)
 
     ninetoothed_output = attention(
         q, k, v, k_cache, k_cache_end, v_cache, v_cache_end, causal_mask
     )
     torch_output = F.scaled_dot_product_attention(
-        q, complete_k, complete_v, scale=1, is_causal=True
+        q, complete_k, complete_v, scale=1, is_causal=True, enable_gqa=True
     )
     triton_output = triton_attention(q, complete_k, complete_v)
 
     print(ninetoothed_output)
     print(torch_output)
     print(triton_output)
-    
+
     print(torch.max(torch.abs(ninetoothed_output - torch_output)))
     if torch.allclose(ninetoothed_output, torch_output, atol=0.01):
         print("✅ NineToothed and PyTorch match.")
@@ -346,7 +349,9 @@ if __name__ == "__main__":
 
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(
-                lambda: attention(q, k, v, k_cache, k_cache_end, v_cache, v_cache_end)
+                lambda: attention(
+                    q, k, v, k_cache, k_cache_end, v_cache, v_cache_end, causal_mask
+                )
             )
         elif provider == "torch":
             ms = triton.testing.do_bench(
@@ -367,4 +372,4 @@ if __name__ == "__main__":
 
         return perf(ms)
 
-    # benchmark.run(show_plots=True, print_data=True, save_path=".")
+    benchmark.run(show_plots=True, print_data=True, save_path=".")
