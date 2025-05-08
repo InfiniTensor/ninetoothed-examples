@@ -23,11 +23,14 @@ def arrangement(input, filter, output):
     return matmul.arrangement(input_flattened, filter_permuted, output_flattened)
 
 
-conv2d_kernel = ninetoothed.make(
-    arrangement,
-    matmul.application,
-    (Tensor(4), Tensor(4, constexpr_shape=True), Tensor(4)),
+filter_shape_options = (
+    None,
+    None,
+    {"constexpr": True, "upper_bound": 16},
+    {"constexpr": True, "upper_bound": 16},
 )
+tensors = (Tensor(4), Tensor(4, shape_options=filter_shape_options), Tensor(4))
+conv2d_kernel = ninetoothed.make(arrangement, matmul.application, tensors)
 
 
 def conv2d(input, filter):
