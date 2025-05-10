@@ -31,11 +31,14 @@ def arrangement(tensor, sin_table, cos_table, interleaved=True):
 
 
 def application(tensor, sin_table, cos_table):
+    sin_table_loaded = sin_table
+    cos_table_loaded = cos_table
+
     tensor_0 = tensor[0]
     tensor_1 = tensor[1]
 
-    tensor[0] = tensor_0 * cos_table - tensor_1 * sin_table
-    tensor[1] = tensor_0 * sin_table + tensor_1 * cos_table
+    tensor[0] = tensor_0 * cos_table_loaded - tensor_1 * sin_table_loaded
+    tensor[1] = tensor_0 * sin_table_loaded + tensor_1 * cos_table_loaded
 
 
 tensors = tuple(Tensor(4, shape_options={"constexpr": True}) for _ in range(3))
