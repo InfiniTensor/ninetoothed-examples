@@ -33,15 +33,11 @@ def ninetoothed_swiglu(a, b):
 
 @triton.jit
 def triton_swiglu_kernel(
-    a_ptr,
-    b_ptr,
-    c_ptr,
-    data_size: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
+    a_ptr, b_ptr, c_ptr, num_elements: tl.constexpr, BLOCK_SIZE: tl.constexpr
 ):
     pid = tl.program_id(0)
     offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < data_size
+    mask = offsets < num_elements
 
     a = tl.load(a_ptr + offsets, mask=mask, other=0.0)
     b = tl.load(b_ptr + offsets, mask=mask, other=0.0)
@@ -57,18 +53,12 @@ def triton_swiglu(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     a_flat = a.flatten()
     b_flat = b.flatten()
     c_flat = torch.empty_like(a_flat)
-    data_size = a_flat.numel()
+    num_elements = a_flat.numel()
 
     def grid(meta):
-        return (triton.cdiv(data_size, meta["BLOCK_SIZE"]),)
+        return (triton.cdiv(num_elements, meta["BLOCK_SIZE"]),)
 
-    triton_swiglu_kernel[grid](
-        a_flat,
-        b_flat,
-        c_flat,
-        data_size,
-        BLOCK_SIZE=1024,
-    )
+    triton_swiglu_kernel[grid](a_flat, b_flat, c_flat, num_elements, BLOCK_SIZE=1024)
 
     return c_flat.view_as(a)
 
