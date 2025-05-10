@@ -63,7 +63,10 @@ def application(q, k, v, scale, o):
     o = acc  # noqa: F841
 
 
-q, k, v, o = (Tensor(4, constexpr_shape=True) for _ in range(4))
+q, k, v, o = (
+    Tensor(4, shape_options=(None, None, None, {"constexpr": True, "upper_bound": 128}))
+    for _ in range(4)
+)
 attention_kernel = ninetoothed.make(arrangement, application, (q, k, v, Tensor(0), o))
 
 
