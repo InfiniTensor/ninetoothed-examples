@@ -38,7 +38,7 @@ def application(tensor, sin_table, cos_table):
     tensor[1] = tensor_0 * sin_table + tensor_1 * cos_table
 
 
-tensors = tuple(Tensor(4, constexpr_shape=True) for _ in range(3))
+tensors = tuple(Tensor(4, shape_options={"constexpr": True}) for _ in range(3))
 rope_kernel = ninetoothed.make(arrangement, application, tensors)
 
 
