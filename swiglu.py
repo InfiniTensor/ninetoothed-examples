@@ -20,7 +20,7 @@ def swiglu_kernel(
     c = a * gate  # noqa: F841
 
 
-def ninetoothed_swiglu(a, b):
+def swiglu(a, b):
     a_1d = a.flatten()
     b_1d = b.flatten()
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     b = torch.rand(shape, dtype=dtype, device=device)
     c = torch.rand(shape, dtype=dtype, device=device)
 
-    ninetoothed_output = ninetoothed_swiglu(a, b)
+    ninetoothed_output = swiglu(a, b)
     torch_output = torch_swiglu(a, b)
     triton_output = triton_swiglu(a, b)
     print(ninetoothed_output)
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
         if provider == "ninetoothed":
             ms, min_ms, max_ms = triton.testing.do_bench(
-                lambda: ninetoothed_swiglu(a, b), quantiles=quantiles
+                lambda: swiglu(a, b), quantiles=quantiles
             )
         elif provider == "torch":
             ms, min_ms, max_ms = triton.testing.do_bench(
