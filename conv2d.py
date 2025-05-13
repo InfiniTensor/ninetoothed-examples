@@ -5,7 +5,7 @@ import triton
 import triton.language as tl
 from ninetoothed import Tensor
 
-import matmul
+import mm
 
 
 def arrangement(input, filter, output):
@@ -20,12 +20,12 @@ def arrangement(input, filter, output):
 
     output_flattened = output.permute((0, 2, 3, 1)).flatten(end_dim=3)
 
-    return matmul.arrangement(input_flattened, filter_permuted, output_flattened)
+    return mm.arrangement(input_flattened, filter_permuted, output_flattened)
 
 
 shape_options = {"constexpr": True, "upper_bound": 16}
 tensors = tuple(Tensor(4, shape_options=shape_options) for _ in range(3))
-conv2d_kernel = ninetoothed.make(arrangement, matmul.application, tensors)
+conv2d_kernel = ninetoothed.make(arrangement, mm.application, tensors)
 
 
 def conv2d(input, filter):

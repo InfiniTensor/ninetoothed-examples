@@ -2,7 +2,7 @@ import ninetoothed
 import torch
 from ninetoothed import Symbol, Tensor
 
-import matmul
+import mm
 
 BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
 BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
@@ -36,7 +36,7 @@ def arrangement(
 
 
 tensors = (Tensor(3), Tensor(3), Tensor(3))
-bmm_kernel = ninetoothed.make(arrangement, matmul.application, tensors)
+bmm_kernel = ninetoothed.make(arrangement, mm.application, tensors)
 
 
 def bmm(lhs, rhs):

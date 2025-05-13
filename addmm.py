@@ -6,21 +6,19 @@ import triton
 import triton.language as tl
 from ninetoothed import Tensor
 
-import matmul
+import mm
 
 
 def arrangement(input, mat1, mat2, beta, alpha, output):
-    _, _, input_arranged = matmul.arrangement(mat1, mat2, input)
+    _, _, input_arranged = mm.arrangement(mat1, mat2, input)
 
-    mat1_arranged, mat2_arranged, output_arranged = matmul.arrangement(
-        mat1, mat2, output
-    )
+    mat1_arranged, mat2_arranged, output_arranged = mm.arrangement(mat1, mat2, output)
 
     return input_arranged, mat1_arranged, mat2_arranged, beta, alpha, output_arranged
 
 
 def application(input, mat1, mat2, beta, alpha, output):
-    matmul.application(mat1, mat2, output)
+    mm.application(mat1, mat2, output)
     output = beta * input + alpha * output
 
 
