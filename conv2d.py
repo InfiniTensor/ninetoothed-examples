@@ -23,7 +23,8 @@ def arrangement(input, filter, output):
     return matmul.arrangement(input_flattened, filter_permuted, output_flattened)
 
 
-tensors = (Tensor(4, constexpr_shape=True) for _ in range(3))
+shape_options = {"constexpr": True, "upper_bound": 16}
+tensors = tuple(Tensor(4, shape_options=shape_options) for _ in range(3))
 conv2d_kernel = ninetoothed.make(arrangement, matmul.application, tensors)
 
 
@@ -33,15 +34,98 @@ def conv2d(input, filter):
     p = h - r + 1
     q = w - s + 1
 
-    output = torch.empty((n, k, p, q), device=input.device, dtype=input.dtype)
+    output = torch.empty((n, k, p, q), dtype=input.dtype, device=input.device)
 
-    conv2d_kernel(
-        input, filter, output, BLOCK_SIZE_M=64, BLOCK_SIZE_N=64, BLOCK_SIZE_K=64
-    )
+    conv2d_kernel(input, filter, output)
 
     return output
 
 
+@triton.autotune(
+    configs=[
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 128,
+                "BLOCK_SIZE_N": 256,
+                "BLOCK_SIZE_K": 64,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=3,
+            num_warps=8,
+        ),
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 64,
+                "BLOCK_SIZE_N": 256,
+                "BLOCK_SIZE_K": 32,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 128,
+                "BLOCK_SIZE_N": 128,
+                "BLOCK_SIZE_K": 32,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 128,
+                "BLOCK_SIZE_N": 64,
+                "BLOCK_SIZE_K": 32,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 64,
+                "BLOCK_SIZE_N": 128,
+                "BLOCK_SIZE_K": 32,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 128,
+                "BLOCK_SIZE_N": 32,
+                "BLOCK_SIZE_K": 32,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 64,
+                "BLOCK_SIZE_N": 32,
+                "BLOCK_SIZE_K": 32,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=5,
+            num_warps=2,
+        ),
+        triton.Config(
+            {
+                "BLOCK_SIZE_M": 32,
+                "BLOCK_SIZE_N": 64,
+                "BLOCK_SIZE_K": 32,
+                "GROUP_SIZE_M": 8,
+            },
+            num_stages=5,
+            num_warps=2,
+        ),
+    ],
+    key=["N", "C", "H", "W", "C", "R", "S"],
+)
 @triton.jit
 def triton_conv2d_kernel(
     input_ptr,
@@ -160,7 +244,7 @@ def triton_conv2d(input, filter):
     p = h - r + 1
     q = w - s + 1
 
-    output = torch.empty((n, k, p, q), device=input.device, dtype=input.dtype)
+    output = torch.empty((n, k, p, q), dtype=input.dtype, device=input.device)
 
     def grid(meta):
         return (
@@ -182,10 +266,6 @@ def triton_conv2d(input, filter):
         *input.stride(),
         *filter.stride(),
         *output.stride(),
-        BLOCK_SIZE_M=64,
-        BLOCK_SIZE_N=64,
-        BLOCK_SIZE_K=64,
-        GROUP_SIZE_M=8,
     )
 
     return output
@@ -193,17 +273,23 @@ def triton_conv2d(input, filter):
 
 if __name__ == "__main__":
     torch.manual_seed(0)
+
     n, c, h, w = 4, 3, 224, 224
     k, _, r, s = 8, c, 3, 3
     dtype = torch.float16
-    input = torch.randn(n, c, h, w, dtype=dtype, device="cuda")
-    filter = torch.randn(k, c, r, s, dtype=dtype, device="cuda")
+    device = "cuda"
+
+    input = torch.randn(n, c, h, w, dtype=dtype, device=device)
+    filter = torch.randn(k, c, r, s, dtype=dtype, device=device)
+
     ninetoothed_output = conv2d(input, filter)
     torch_output = F.conv2d(input, filter)
     triton_output = triton_conv2d(input, filter)
+
     print(ninetoothed_output)
     print(torch_output)
     print(triton_output)
+
     if torch.allclose(ninetoothed_output, torch_output, atol=0.01, rtol=0.01):
         print("✅ NineToothed and PyTorch match.")
     else:
@@ -230,13 +316,14 @@ if __name__ == "__main__":
     def benchmark(n, provider):
         _, c, h, w = n, 512, 14, 14
         k, _, r, s = 512, c, 3, 3
-        dtype = torch.float16
-        input = torch.randn((n, c, h, w), dtype=dtype, device="cuda")
-        filter = torch.randn((k, c, r, s), dtype=dtype, device="cuda")
+
+        input = torch.randn((n, c, h, w), dtype=dtype, device=device)
+        filter = torch.randn((k, c, r, s), dtype=dtype, device=device)
 
         ninetoothed_output = conv2d(input, filter)
         torch_output = F.conv2d(input, filter)
         triton_output = triton_conv2d(input, filter)
+
         assert torch.allclose(ninetoothed_output, torch_output, atol=0.01, rtol=0.01)
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 

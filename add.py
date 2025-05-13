@@ -4,7 +4,7 @@ import triton
 import triton.language as tl
 from ninetoothed import Symbol, Tensor
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", meta=True)
+BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
 
 
 @ninetoothed.jit
@@ -19,18 +19,14 @@ def add_kernel(
 def add(lhs, rhs):
     output = torch.empty_like(lhs)
 
-    add_kernel(lhs, rhs, output)
+    add_kernel(lhs, rhs, output, BLOCK_SIZE=1024)
 
     return output
 
 
 @triton.jit
 def triton_add_kernel(
-    lhs_ptr,
-    rhs_ptr,
-    output_ptr,
-    n_elements,
-    BLOCK_SIZE: tl.constexpr,
+    lhs_ptr, rhs_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr
 ):
     pid = tl.program_id(0)
 
@@ -59,16 +55,22 @@ def triton_add(lhs, rhs):
 
 if __name__ == "__main__":
     torch.manual_seed(0)
+
     size = 98432
     dtype = torch.float16
-    lhs = torch.rand(size, dtype=dtype, device="cuda")
-    rhs = torch.rand(size, dtype=dtype, device="cuda")
+    device = "cuda"
+
+    lhs = torch.rand(size, dtype=dtype, device=device)
+    rhs = torch.rand(size, dtype=dtype, device=device)
+
     ninetoothed_output = add(lhs, rhs)
     torch_output = lhs + rhs
     triton_output = triton_add(lhs, rhs)
+
     print(ninetoothed_output)
     print(torch_output)
     print(triton_output)
+
     if torch.allclose(ninetoothed_output, torch_output):
         print("✅ NineToothed and PyTorch match.")
     else:
@@ -93,19 +95,20 @@ if __name__ == "__main__":
         )
     )
     def benchmark(size, provider):
-        lhs = torch.randn(size, device="cuda", dtype=torch.float16)
-        rhs = torch.randn(size, device="cuda", dtype=torch.float16)
+        lhs = torch.randn(size, dtype=dtype, device=device)
+        rhs = torch.randn(size, dtype=dtype, device=device)
 
         ninetoothed_output = add(lhs, rhs)
-        torch_output = lhs + rhs
+        torch_output = torch.add(lhs, rhs)
         triton_output = triton_add(lhs, rhs)
+
         assert torch.allclose(ninetoothed_output, torch_output)
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(lambda: add(lhs, rhs))
         elif provider == "torch":
-            ms = triton.testing.do_bench(lambda: lhs + rhs)
+            ms = triton.testing.do_bench(lambda: torch.add(lhs, rhs))
         elif provider == "triton":
             ms = triton.testing.do_bench(lambda: triton_add(lhs, rhs))
 

@@ -33,6 +33,7 @@ These approaches allow you to obtain results in seconds. However, selecting opti
 
 This project includes code modified or inspired from the following open-source repositories:
 
+* [https://github.com/huggingface/transformers](https://github.com/huggingface/transformers)
 * [https://github.com/triton-lang/triton](https://github.com/triton-lang/triton)
 * [https://github.com/ROCm/triton](https://github.com/ROCm/triton)
 * [https://github.com/l1351868270/implicit_gemm.triton](https://github.com/l1351868270/implicit_gemm.triton)
