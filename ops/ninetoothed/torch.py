@@ -2,6 +2,7 @@ import torch
 
 import ops.ninetoothed.kernels.add
 import ops.ninetoothed.kernels.addmm
+import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.mm
 
 
@@ -18,6 +19,19 @@ def addmm(input, mat1, mat2, beta=1, alpha=1):
     output = torch.empty(output_shape, dtype=mat1.dtype, device=mat1.device)
 
     ops.ninetoothed.kernels.addmm.kernel(input, mat1, mat2, beta, alpha, output)
+
+    return output
+
+
+def conv2d(input, filter):
+    n, _, h, w = input.shape
+    k, _, r, s = filter.shape
+    p = h - r + 1
+    q = w - s + 1
+
+    output = torch.empty((n, k, p, q), dtype=input.dtype, device=input.device)
+
+    ops.ninetoothed.kernels.conv2d.kernel(input, filter, output)
 
     return output
 

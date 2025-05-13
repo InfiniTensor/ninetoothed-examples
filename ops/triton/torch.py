@@ -3,6 +3,7 @@ import triton
 
 import ops.triton.kernels.add
 import ops.triton.kernels.addmm
+import ops.triton.kernels.conv2d
 import ops.triton.kernels.mm
 
 
@@ -49,6 +50,39 @@ def addmm(input, mat1, mat2, beta=1, alpha=1):
         output.stride(1),
         beta,
         alpha,
+    )
+
+    return output
+
+
+def triton_conv2d(input, filter):
+    n, c, h, w = input.shape
+    k, _, r, s = filter.shape
+    p = h - r + 1
+    q = w - s + 1
+
+    output = torch.empty((n, k, p, q), dtype=input.dtype, device=input.device)
+
+    def grid(meta):
+        return (
+            triton.cdiv(n * p * q, meta["BLOCK_SIZE_M"])
+            * triton.cdiv(k, meta["BLOCK_SIZE_N"]),
+        )
+
+    ops.triton.kernels.conv2d.kernel[grid](
+        input,
+        filter,
+        output,
+        n,
+        c,
+        h,
+        w,
+        k,
+        r,
+        s,
+        *input.stride(),
+        *filter.stride(),
+        *output.stride(),
     )
 
     return output
