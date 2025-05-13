@@ -1,6 +1,7 @@
 import torch
 
 import ops.ninetoothed.kernels.add
+import ops.ninetoothed.kernels.addmm
 import ops.ninetoothed.kernels.mm
 
 
@@ -8,6 +9,15 @@ def add(input, other):
     output = torch.empty_like(input)
 
     ops.ninetoothed.kernels.add.kernel(input, other, output, BLOCK_SIZE=1024)
+
+    return output
+
+
+def addmm(input, mat1, mat2, beta=1, alpha=1):
+    output_shape = (mat1.shape[0], mat2.shape[1])
+    output = torch.empty(output_shape, dtype=mat1.dtype, device=mat1.device)
+
+    ops.ninetoothed.kernels.addmm.kernel(input, mat1, mat2, beta, alpha, output)
 
     return output
 

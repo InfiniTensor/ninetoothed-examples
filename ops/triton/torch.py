@@ -2,6 +2,7 @@ import torch
 import triton
 
 import ops.triton.kernels.add
+import ops.triton.kernels.addmm
 import ops.triton.kernels.mm
 
 
@@ -15,6 +16,39 @@ def add(input, other):
 
     ops.triton.kernels.add.kernel[grid](
         input, other, output, num_elements, BLOCK_SIZE=1024
+    )
+
+    return output
+
+
+def addmm(input, mat1, mat2, beta=1, alpha=1):
+    output_shape = (mat1.shape[0], mat2.shape[1])
+    output = torch.empty(output_shape, dtype=mat1.dtype, device=mat1.device)
+
+    def grid(meta):
+        return (
+            triton.cdiv(mat1.shape[0], meta["BLOCK_SIZE_M"])
+            * triton.cdiv(mat2.shape[1], meta["BLOCK_SIZE_N"]),
+        )
+
+    ops.triton.kernels.addmm.kernel[grid](
+        input,
+        mat1,
+        mat2,
+        output,
+        mat1.shape[0],
+        mat2.shape[1],
+        mat1.shape[1],
+        input.stride(0),
+        input.stride(1),
+        mat1.stride(0),
+        mat1.stride(1),
+        mat2.stride(0),
+        mat2.stride(1),
+        output.stride(0),
+        output.stride(1),
+        beta,
+        alpha,
     )
 
     return output
