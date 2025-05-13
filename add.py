@@ -1,57 +1,8 @@
-import ninetoothed
 import torch
 import triton
-import triton.language as tl
-from ninetoothed import Symbol, Tensor
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
-
-
-@ninetoothed.jit
-def add_kernel(
-    lhs: Tensor(1).tile((BLOCK_SIZE,)),
-    rhs: Tensor(1).tile((BLOCK_SIZE,)),
-    output: Tensor(1).tile((BLOCK_SIZE,)),
-):
-    output = lhs + rhs  # noqa: F841
-
-
-def add(lhs, rhs):
-    output = torch.empty_like(lhs)
-
-    add_kernel(lhs, rhs, output, BLOCK_SIZE=1024)
-
-    return output
-
-
-@triton.jit
-def triton_add_kernel(
-    lhs_ptr, rhs_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr
-):
-    pid = tl.program_id(0)
-
-    block_start = pid * BLOCK_SIZE
-    offsets = block_start + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < n_elements
-
-    lhs = tl.load(lhs_ptr + offsets, mask=mask)
-    rhs = tl.load(rhs_ptr + offsets, mask=mask)
-    output = lhs + rhs
-
-    tl.store(output_ptr + offsets, output, mask=mask)
-
-
-def triton_add(lhs, rhs):
-    output = torch.empty_like(lhs)
-    n_elements = output.numel()
-
-    def grid(meta):
-        return (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
-
-    triton_add_kernel[grid](lhs, rhs, output, n_elements, BLOCK_SIZE=1024)
-
-    return output
-
+import ops.ninetoothed.torch
+import ops.triton.torch
 
 if __name__ == "__main__":
     torch.manual_seed(0)
@@ -60,12 +11,12 @@ if __name__ == "__main__":
     dtype = torch.float16
     device = "cuda"
 
-    lhs = torch.rand(size, dtype=dtype, device=device)
-    rhs = torch.rand(size, dtype=dtype, device=device)
+    input = torch.rand(size, dtype=dtype, device=device)
+    other = torch.rand(size, dtype=dtype, device=device)
 
-    ninetoothed_output = add(lhs, rhs)
-    torch_output = lhs + rhs
-    triton_output = triton_add(lhs, rhs)
+    ninetoothed_output = ops.ninetoothed.torch.add(input, other)
+    torch_output = input + other
+    triton_output = ops.triton.torch.add(input, other)
 
     print(ninetoothed_output)
     print(torch_output)
@@ -95,22 +46,24 @@ if __name__ == "__main__":
         )
     )
     def benchmark(size, provider):
-        lhs = torch.randn(size, dtype=dtype, device=device)
-        rhs = torch.randn(size, dtype=dtype, device=device)
+        input = torch.randn(size, dtype=dtype, device=device)
+        other = torch.randn(size, dtype=dtype, device=device)
 
-        ninetoothed_output = add(lhs, rhs)
-        torch_output = torch.add(lhs, rhs)
-        triton_output = triton_add(lhs, rhs)
+        ninetoothed_output = ops.ninetoothed.torch.add(input, other)
+        torch_output = torch.add(input, other)
+        triton_output = ops.triton.torch.add(input, other)
 
         assert torch.allclose(ninetoothed_output, torch_output)
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
         if provider == "ninetoothed":
-            ms = triton.testing.do_bench(lambda: add(lhs, rhs))
+            ms = triton.testing.do_bench(
+                lambda: ops.ninetoothed.torch.add(input, other)
+            )
         elif provider == "torch":
-            ms = triton.testing.do_bench(lambda: torch.add(lhs, rhs))
+            ms = triton.testing.do_bench(lambda: torch.add(input, other))
         elif provider == "triton":
-            ms = triton.testing.do_bench(lambda: triton_add(lhs, rhs))
+            ms = triton.testing.do_bench(lambda: ops.triton.torch.add(input, other))
 
         return ms
 
