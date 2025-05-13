@@ -5,6 +5,7 @@ import ops.triton.kernels.add
 import ops.triton.kernels.addmm
 import ops.triton.kernels.conv2d
 import ops.triton.kernels.mm
+import ops.triton.kernels.softmax
 
 
 def add(input, other):
@@ -111,6 +112,21 @@ def mm(input, other):
         other.stride(1),
         output.stride(0),
         output.stride(1),
+    )
+
+    return output
+
+
+def softmax(input):
+    output = torch.empty_like(input)
+
+    ops.triton.kernels.softmax.kernel[(input.shape[0],)](
+        input,
+        output,
+        input.stride(0),
+        output.stride(0),
+        input.shape[1],
+        BLOCK_SIZE=triton.next_power_of_2(input.shape[-1]),
     )
 
     return output

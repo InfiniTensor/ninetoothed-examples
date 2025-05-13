@@ -4,6 +4,7 @@ import ops.ninetoothed.kernels.add
 import ops.ninetoothed.kernels.addmm
 import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.mm
+import ops.ninetoothed.kernels.softmax
 
 
 def add(input, other):
@@ -41,5 +42,13 @@ def mm(input, other):
     output = torch.empty(output_shape, dtype=input.dtype, device=input.device)
 
     ops.ninetoothed.kernels.mm.kernel(input, other, output)
+
+    return output
+
+
+def softmax(input):
+    output = torch.empty_like(input)
+
+    ops.ninetoothed.kernels.softmax.kernel(input, output, BLOCK_SIZE=input.shape[-1])
 
     return output
