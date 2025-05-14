@@ -1,3 +1,5 @@
+import math
+
 import torch
 
 import ops.ninetoothed.kernels.add
@@ -5,6 +7,7 @@ import ops.ninetoothed.kernels.addmm
 import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.mm
 import ops.ninetoothed.kernels.rms_norm
+import ops.ninetoothed.kernels.scaled_dot_product_attention
 import ops.ninetoothed.kernels.softmax
 
 
@@ -58,6 +61,17 @@ def rms_norm(input, eps=None):
     )
 
     return output
+
+
+def scaled_dot_product_attention(q, k, v, scale=None):
+    if scale is None:
+        scale = 1 / math.sqrt(q.shape[-1])
+
+    o = torch.empty_like(q)
+
+    ops.ninetoothed.kernels.scaled_dot_product_attention.kernel(q, k, v, scale, o)
+
+    return o
 
 
 def softmax(input):

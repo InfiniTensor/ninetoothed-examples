@@ -1,3 +1,5 @@
+import math
+
 import torch
 import triton
 
@@ -6,6 +8,7 @@ import ops.triton.kernels.addmm
 import ops.triton.kernels.conv2d
 import ops.triton.kernels.mm
 import ops.triton.kernels.rms_norm
+import ops.triton.kernels.scaled_dot_product_attention
 import ops.triton.kernels.softmax
 
 
@@ -135,6 +138,38 @@ def rms_norm(input, eps=None):
     )
 
     return output
+
+
+def scaled_dot_product_attention(q, k, v, scale=None):
+    batch_size, num_heads, seq_len, emb_dim = q.shape
+
+    if scale is None:
+        scale = 1 / math.sqrt(emb_dim)
+
+    o = torch.empty_like(q)
+
+    def grid(meta):
+        return (
+            triton.cdiv(seq_len, meta["BLOCK_SIZE_M"]),
+            num_heads,
+            batch_size,
+        )
+
+    ops.triton.kernels.scaled_dot_product_attention.kernel[grid](
+        q,
+        k,
+        v,
+        o,
+        *q.stride(),
+        *k.stride(),
+        *v.stride(),
+        *o.stride(),
+        scale=scale,
+        seq_len=seq_len,
+        EMB_DIM=emb_dim,
+    )
+
+    return o
 
 
 def softmax(input):

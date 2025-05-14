@@ -2,9 +2,9 @@ import argparse
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from attention import Attention
 from fused_rms_norm import RMSNorm
 from linear import Linear
+from scaled_dot_product_attention import Attention
 from silu import SiLU
 from utils import replace_module
 
