@@ -57,7 +57,7 @@ def addmm(input, mat1, mat2, beta=1, alpha=1):
     return output
 
 
-def triton_conv2d(input, filter):
+def conv2d(input, filter):
     n, c, h, w = input.shape
     k, _, r, s = filter.shape
     p = h - r + 1

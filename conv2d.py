@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     ninetoothed_output = ops.ninetoothed.torch.conv2d(input, filter)
     torch_output = F.conv2d(input, filter)
-    triton_output = ops.triton.torch.triton_conv2d(input, filter)
+    triton_output = ops.triton.torch.conv2d(input, filter)
 
     print(ninetoothed_output)
     print(torch_output)
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
         ninetoothed_output = ops.ninetoothed.torch.conv2d(input, filter)
         torch_output = F.conv2d(input, filter)
-        triton_output = ops.triton.torch.triton_conv2d(input, filter)
+        triton_output = ops.triton.torch.conv2d(input, filter)
 
         assert torch.allclose(ninetoothed_output, torch_output, atol=0.01, rtol=0.01)
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
@@ -68,9 +68,7 @@ if __name__ == "__main__":
         elif provider == "torch":
             ms = triton.testing.do_bench(lambda: F.conv2d(input, filter))
         elif provider == "triton":
-            ms = triton.testing.do_bench(
-                lambda: ops.triton.torch.triton_conv2d(input, filter)
-            )
+            ms = triton.testing.do_bench(lambda: ops.triton.torch.conv2d(input, filter))
 
         return ms
 
