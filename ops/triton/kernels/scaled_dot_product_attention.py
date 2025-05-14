@@ -96,23 +96,24 @@ def kernel(
         order=(1, 0),
     )
 
-    q = (tl.load(q_block_ptr) * scale * 1.44269504089).to(q_block_ptr.type.element_ty)
+    q = tl.load(q_block_ptr, boundary_check=(0, 1))
+    q = (q * scale * 1.44269504089).to(q_block_ptr.type.element_ty)
 
     acc = tl.zeros((BLOCK_SIZE_M, EMB_DIM), dtype=tl.float32)
     l_i = tl.full((BLOCK_SIZE_M,), 1, dtype=tl.float32)
     m_i = tl.full((BLOCK_SIZE_M,), float("-inf"), dtype=tl.float32)
 
-    for _ in range(0, tl.cdiv(seq_len, BLOCK_SIZE_N)):
-        k = tl.load(k_block_ptr)
+    for i in range(0, tl.cdiv(seq_len, BLOCK_SIZE_N)):
+        k = tl.load(k_block_ptr, boundary_check=(0, 1))
 
-        qk = tl.dot(q, k)
+        mask = i * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N) < seq_len
+        qk = tl.where(mask, tl.dot(q, k), float("-inf"))
 
         m_ij = tl.maximum(m_i, tl.max(qk, 1))
-        qk -= m_ij[:, None]
-        p = tl.exp2(qk)
+        p = tl.exp2(qk - m_ij[:, None])
         l_ij = tl.sum(p, 1)
 
-        v = tl.load(v_block_ptr)
+        v = tl.load(v_block_ptr, boundary_check=(0, 1))
         alpha = tl.exp2(m_i - m_ij)
         acc = acc * alpha[:, None] + tl.dot(p.to(v_block_ptr.type.element_ty), v)
         m_i = m_ij
@@ -123,4 +124,4 @@ def kernel(
 
     acc /= l_i[:, None]
 
-    tl.store(o_block_ptr, acc.to(o_ptr.type.element_ty))
+    tl.store(o_block_ptr, acc.to(o_ptr.type.element_ty), boundary_check=(0, 1))

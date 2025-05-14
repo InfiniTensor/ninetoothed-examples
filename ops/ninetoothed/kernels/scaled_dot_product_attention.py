@@ -38,6 +38,7 @@ def application(q, k, v, scale, o):
 
     for i in range(k.shape[0]):
         qk = ntl.dot(q_loaded, ntl.trans(k[i]))
+        qk = ntl.where(k[i].offsets(-2) < k.source.shape[-2], qk, float("-inf"))
 
         m_ij = ntl.maximum(m_i, ntl.max(qk, 1))
         p = ntl.exp2(qk - m_ij[:, None])
@@ -49,7 +50,7 @@ def application(q, k, v, scale, o):
         l_i = l_i * alpha + l_ij
 
     acc /= l_i[:, None]
-    o = acc  # noqa: F841
+    o = acc.to(o.dtype)  # noqa: F841
 
 
 shape_options = (None, None, None, {"constexpr": True, "upper_bound": 128})
