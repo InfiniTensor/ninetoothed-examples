@@ -2,7 +2,7 @@ import ninetoothed
 import torch
 from ninetoothed import Symbol, Tensor
 
-import mm
+import ops.ninetoothed.kernels.mm as mm
 
 BLOCK_SIZE_M = Symbol("BLOCK_SIZE_M", meta=True)
 BLOCK_SIZE_N = Symbol("BLOCK_SIZE_N", meta=True)
