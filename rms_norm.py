@@ -1,72 +1,9 @@
-import ninetoothed
-import ninetoothed.language as ntl
 import torch
 import torch.nn.functional as F
 import triton
-import triton.language as tl
-from ninetoothed import Symbol, Tensor
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
-
-
-@ninetoothed.jit
-def rms_norm_kernel(
-    input: Tensor(2).tile((1, BLOCK_SIZE)),
-    output: Tensor(2).tile((1, BLOCK_SIZE)),
-    eps: Tensor(0),
-):
-    input_fp32 = ntl.cast(input, ntl.float32)
-    output = input_fp32 * ntl.rsqrt(  # noqa: F841
-        ntl.sum(input_fp32 * input_fp32) / input.shape[-1] + eps
-    )
-
-
-def rms_norm(input, eps=1e-5):
-    output = torch.empty_like(input)
-
-    rms_norm_kernel(input, output, eps, BLOCK_SIZE=input.shape[-1])
-
-    return output
-
-
-@triton.jit
-def triton_rms_norm_kernel(
-    input_ptr,
-    output_ptr,
-    num_cols,
-    input_row_stride,
-    output_row_stride,
-    eps: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
-):
-    row_idx = tl.program_id(0)
-
-    col_offsets = tl.arange(0, BLOCK_SIZE)
-    input_ptrs = input_ptr + row_idx * input_row_stride + col_offsets
-    mask = col_offsets < num_cols
-    input = tl.load(input_ptrs, mask=mask).to(tl.float32)
-
-    output = input * tl.rsqrt(tl.sum(input * input) / num_cols + eps)
-
-    output_ptrs = output_ptr + row_idx * output_row_stride + col_offsets
-    tl.store(output_ptrs, output, mask=mask)
-
-
-def triton_rms_norm(input, eps=1e-5):
-    output = torch.empty_like(input)
-
-    triton_rms_norm_kernel[(input.shape[-2],)](
-        input,
-        output,
-        input.shape[-1],
-        input.stride(-2),
-        output.stride(-2),
-        eps,
-        BLOCK_SIZE=triton.next_power_of_2(input.shape[-1]),
-    )
-
-    return output
-
+import ops.ninetoothed.torch
+import ops.triton.torch
 
 if __name__ == "__main__":
     torch.manual_seed(0)
@@ -76,9 +13,9 @@ if __name__ == "__main__":
 
     input = torch.randn(1151, 8192, dtype=dtype, device=device)
 
-    ninetoothed_output = rms_norm(input)
+    ninetoothed_output = ops.ninetoothed.torch.rms_norm(input)
     torch_output = F.rms_norm(input, input.shape[-1:])
-    triton_output = triton_rms_norm(input)
+    triton_output = ops.triton.torch.rms_norm(input)
 
     print(ninetoothed_output)
     print(torch_output)
@@ -110,21 +47,21 @@ if __name__ == "__main__":
     def benchmark(m, n, provider):
         input = torch.randn(m, n, dtype=dtype, device=device)
 
-        ninetoothed_output = rms_norm(input)
+        ninetoothed_output = ops.ninetoothed.torch.rms_norm(input)
         torch_output = F.rms_norm(input, input.shape[-1:])
-        triton_output = triton_rms_norm(input)
+        triton_output = ops.triton.torch.rms_norm(input)
 
         assert torch.allclose(ninetoothed_output, torch_output, atol=0.001, rtol=0.005)
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
         if provider == "ninetoothed":
-            ms = triton.testing.do_bench(lambda: rms_norm(input))
+            ms = triton.testing.do_bench(lambda: ops.ninetoothed.torch.rms_norm(input))
         elif provider == "torch":
             ms = triton.testing.do_bench(
                 lambda: torch.rms_norm(input, input.shape[-1:])
             )
         elif provider == "triton":
-            ms = triton.testing.do_bench(lambda: triton_rms_norm(input))
+            ms = triton.testing.do_bench(lambda: ops.triton.torch.rms_norm(input))
 
         return ms
 

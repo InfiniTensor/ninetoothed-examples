@@ -5,6 +5,7 @@ import ops.triton.kernels.add
 import ops.triton.kernels.addmm
 import ops.triton.kernels.conv2d
 import ops.triton.kernels.mm
+import ops.triton.kernels.rms_norm
 import ops.triton.kernels.softmax
 
 
@@ -112,6 +113,25 @@ def mm(input, other):
         other.stride(1),
         output.stride(0),
         output.stride(1),
+    )
+
+    return output
+
+
+def rms_norm(input, eps=None):
+    if eps is None:
+        eps = torch.finfo(input.dtype).eps
+
+    output = torch.empty_like(input)
+
+    ops.triton.kernels.rms_norm.kernel[(input.shape[-2],)](
+        input,
+        output,
+        input.shape[-1],
+        input.stride(-2),
+        output.stride(-2),
+        eps,
+        BLOCK_SIZE=triton.next_power_of_2(input.shape[-1]),
     )
 
     return output
