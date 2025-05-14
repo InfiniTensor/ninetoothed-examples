@@ -9,7 +9,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 128,
                 "BLOCK_SIZE_N": 256,
                 "BLOCK_SIZE_K": 64,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=3,
             num_warps=8,
@@ -19,7 +18,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 64,
                 "BLOCK_SIZE_N": 256,
                 "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=4,
             num_warps=4,
@@ -29,7 +27,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 128,
                 "BLOCK_SIZE_N": 128,
                 "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=4,
             num_warps=4,
@@ -39,7 +36,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 128,
                 "BLOCK_SIZE_N": 64,
                 "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=4,
             num_warps=4,
@@ -49,7 +45,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 64,
                 "BLOCK_SIZE_N": 128,
                 "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=4,
             num_warps=4,
@@ -59,7 +54,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 128,
                 "BLOCK_SIZE_N": 32,
                 "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=4,
             num_warps=4,
@@ -69,7 +63,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 64,
                 "BLOCK_SIZE_N": 32,
                 "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=5,
             num_warps=2,
@@ -79,7 +72,6 @@ import triton.language as tl
                 "BLOCK_SIZE_M": 32,
                 "BLOCK_SIZE_N": 64,
                 "BLOCK_SIZE_K": 32,
-                "GROUP_SIZE_M": 8,
             },
             num_stages=5,
             num_warps=2,
@@ -114,24 +106,17 @@ def kernel(
     BLOCK_SIZE_M: tl.constexpr,
     BLOCK_SIZE_N: tl.constexpr,
     BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr,
 ):
     P: tl.constexpr = H - R + 1
     Q: tl.constexpr = W - S + 1
 
-    GEMM_M: tl.constexpr = N * P * Q
     GEMM_N: tl.constexpr = K
     GEMM_K: tl.constexpr = C * R * S
 
     pid = tl.program_id(0)
-    num_pid_gemm_m = tl.cdiv(GEMM_M, BLOCK_SIZE_M)
     num_pid_gemm_n = tl.cdiv(GEMM_N, BLOCK_SIZE_N)
-    num_pid_in_group = GROUP_SIZE_M * num_pid_gemm_n
-    group_id = pid // num_pid_in_group
-    first_pid_gemm_m = group_id * GROUP_SIZE_M
-    group_size_m = min(num_pid_gemm_m - first_pid_gemm_m, GROUP_SIZE_M)
-    pid_gemm_m = first_pid_gemm_m + ((pid % num_pid_in_group) % group_size_m)
-    pid_gemm_n = (pid % num_pid_in_group) // group_size_m
+    pid_gemm_m = pid // num_pid_gemm_n
+    pid_gemm_n = pid % num_pid_gemm_n
 
     offs_gemm_i = pid_gemm_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
     offs_gemm_j = pid_gemm_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
