@@ -4,6 +4,7 @@ import torch
 
 import ops.ninetoothed.kernels.add
 import ops.ninetoothed.kernels.addmm
+import ops.ninetoothed.kernels.bmm
 import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.mm
 import ops.ninetoothed.kernels.rms_norm
@@ -24,6 +25,15 @@ def addmm(input, mat1, mat2, beta=1, alpha=1):
     output = torch.empty(output_shape, dtype=mat1.dtype, device=mat1.device)
 
     ops.ninetoothed.kernels.addmm.kernel(input, mat1, mat2, beta, alpha, output)
+
+    return output
+
+
+def bmm(lhs, rhs):
+    output_shape = (lhs.shape[0], lhs.shape[-2], rhs.shape[-1])
+    output = torch.empty(output_shape, dtype=lhs.dtype, device=lhs.device)
+
+    ops.ninetoothed.kernels.bmm.kernel(lhs, rhs, output)
 
     return output
 

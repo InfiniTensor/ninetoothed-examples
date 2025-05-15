@@ -5,6 +5,7 @@ import triton
 
 import ops.triton.kernels.add
 import ops.triton.kernels.addmm
+import ops.triton.kernels.bmm
 import ops.triton.kernels.conv2d
 import ops.triton.kernels.mm
 import ops.triton.kernels.rms_norm
@@ -55,6 +56,33 @@ def addmm(input, mat1, mat2, beta=1, alpha=1):
         output.stride(1),
         beta,
         alpha,
+    )
+
+    return output
+
+
+def bmm(input, other):
+    batch, m, k = input.shape
+    _, _, n = other.shape
+    output = torch.empty((batch, m, n), dtype=input.dtype, device=input.device)
+
+    def grid(meta):
+        return (
+            batch
+            * triton.cdiv(m, meta["BLOCK_SIZE_M"])
+            * triton.cdiv(n, meta["BLOCK_SIZE_N"]),
+        )
+
+    ops.triton.kernels.bmm.kernel[grid](
+        input,
+        other,
+        output,
+        m,
+        n,
+        k,
+        *input.stride(),
+        *other.stride(),
+        *output.stride(),
     )
 
     return output
