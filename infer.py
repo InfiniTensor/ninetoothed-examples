@@ -1,5 +1,7 @@
 import argparse
+import time
 
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from fused_rms_norm import RMSNorm
@@ -38,6 +40,18 @@ if __name__ == "__main__":
         default="cpu",
         help='Device to use for inference (e.g., "cuda", "cpu").',
     )
+    parser.add_argument(
+        "--num-warmup-iterations",
+        type=int,
+        default=0,
+        help="For profiling. The number of warmup iterations to run before measuring performance.",
+    )
+    parser.add_argument(
+        "--num-profiling-iterations",
+        type=int,
+        default=1,
+        help="For profiling. The number of iterations to run for performance measurement.",
+    )
 
     args = parser.parse_args()
 
@@ -45,6 +59,11 @@ if __name__ == "__main__":
     prompts = args.prompts
     max_new_tokens = args.max_new_tokens
     device = args.device
+    num_warmup_iterations = args.num_warmup_iterations
+    num_profiling_iterations = args.num_profiling_iterations
+
+    assert num_profiling_iterations >= 1
+    assert num_warmup_iterations >= 0
 
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
     model = AutoModelForCausalLM.from_pretrained(model_name_or_path).to(device)
@@ -58,7 +77,25 @@ if __name__ == "__main__":
     replace_module(model, SiLU)
 
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(device)
-    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+
+    for _ in range(num_warmup_iterations):
+        model.generate(**inputs, max_new_tokens=max_new_tokens)
+
+    if device == "cuda":
+        torch.cuda.synchronize()
+
+    start_time = time.time()
+
+    for _ in range(num_profiling_iterations):
+        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+
+    if device == "cuda":
+        torch.cuda.synchronize()
+
+    end_time = time.time()
+    avg_time_ms = (end_time - start_time) * 1000 / num_profiling_iterations
+
     strings = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
     print(strings)
+    print(f"\nAverage inference time: {avg_time_ms:.4f} ms.")
