@@ -4,10 +4,14 @@ import time
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from fused_rms_norm import RMSNorm
-from linear import Linear
-from scaled_dot_product_attention import Attention
-from silu import SiLU
+from fused_rms_norm import RMSNorm, rms_norm_backend
+from linear import Linear, bmm_backend
+from scaled_dot_product_attention import (
+    Attention,
+    rope_backend,
+    scaled_dot_product_attention_backend,
+)
+from silu import SiLU, silu_backend
 from utils import replace_module
 
 if __name__ == "__main__":
@@ -41,6 +45,12 @@ if __name__ == "__main__":
         help='Device to use for inference (e.g., "cuda", "cpu").',
     )
     parser.add_argument(
+        "--backend",
+        type=str,
+        default="ninetoothed",
+        help='Backend to use for inference (e.g., "ninetoothed", "triton", "torch").',
+    )
+    parser.add_argument(
         "--num-warmup-iterations",
         type=int,
         default=0,
@@ -59,6 +69,7 @@ if __name__ == "__main__":
     prompts = args.prompts
     max_new_tokens = args.max_new_tokens
     device = args.device
+    backend = args.backend
     num_warmup_iterations = args.num_warmup_iterations
     num_profiling_iterations = args.num_profiling_iterations
 
@@ -71,31 +82,39 @@ if __name__ == "__main__":
     tokenizer.pad_token = tokenizer.eos_token
     model.generation_config.pad_token_id = tokenizer.pad_token_id
 
-    replace_module(model, Attention)
-    replace_module(model, Linear)
-    replace_module(model, RMSNorm)
-    replace_module(model, SiLU)
+    if backend != "torch":
+        replace_module(model, Attention)
+        replace_module(model, Linear)
+        replace_module(model, RMSNorm)
+        replace_module(model, SiLU)
 
     inputs = tokenizer(prompts, padding=True, return_tensors="pt").to(device)
 
-    for _ in range(num_warmup_iterations):
-        model.generate(**inputs, max_new_tokens=max_new_tokens)
+    with (
+        bmm_backend(backend),
+        rms_norm_backend(backend),
+        rope_backend(backend),
+        scaled_dot_product_attention_backend(backend),
+        silu_backend(backend),
+    ):
+        for _ in range(num_warmup_iterations):
+            model.generate(**inputs, max_new_tokens=max_new_tokens)
 
-    if device == "cuda":
-        torch.cuda.synchronize()
+        if device == "cuda":
+            torch.cuda.synchronize()
 
-    start_time = time.time()
+        start_time = time.time()
 
-    for _ in range(num_profiling_iterations):
-        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
+        for _ in range(num_profiling_iterations):
+            outputs = model.generate(**inputs, max_new_tokens=max_new_tokens)
 
-    if device == "cuda":
-        torch.cuda.synchronize()
+        if device == "cuda":
+            torch.cuda.synchronize()
 
-    end_time = time.time()
-    avg_time_ms = (end_time - start_time) * 1000 / num_profiling_iterations
+        end_time = time.time()
 
     strings = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    avg_time_ms = (end_time - start_time) * 1000 / num_profiling_iterations
 
     print(strings)
     print(f"\nAverage inference time: {avg_time_ms:.4f} ms.")

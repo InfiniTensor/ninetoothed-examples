@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,15 +10,39 @@ import ops.triton.torch
 
 
 class RMSNorm(nn.Module):
+    fused_rms_norm = None
+
     def __init__(self, other):
         super().__init__()
 
         self.__dict__ = other.__dict__
 
     def forward(self, x):
-        return ops.ninetoothed.torch.fused_rms_norm(
-            x, self.weight, self.variance_epsilon
-        )
+        return type(self).fused_rms_norm(x, self.weight, self.variance_epsilon)
+
+
+@contextmanager
+def rms_norm_backend(backend_name):
+    def _torch_fused_rms_norm(x, w, eps):
+        return F.rms_norm(x, x.shape[-1:], w, eps)
+
+    _prev_impl = RMSNorm.fused_rms_norm
+
+    if backend_name == "ninetoothed":
+        impl = ops.ninetoothed.torch.fused_rms_norm
+    elif backend_name == "triton":
+        impl = ops.triton.torch.fused_rms_norm
+    elif backend_name == "torch":
+        impl = _torch_fused_rms_norm
+    else:
+        raise ValueError(f"unknown backend: `{backend_name}`")
+
+    RMSNorm.fused_rms_norm = impl
+
+    try:
+        yield
+    finally:
+        RMSNorm.fused_rms_norm = _prev_impl
 
 
 if __name__ == "__main__":

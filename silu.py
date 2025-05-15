@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,13 +10,36 @@ import ops.triton.torch
 
 
 class SiLU(nn.Module):
+    silu = None
+
     def __init__(self, other):
         super().__init__()
 
         self.__dict__ = other.__dict__
 
     def forward(self, input):
-        return ops.ninetoothed.torch.silu(input)
+        return type(self).silu(input)
+
+
+@contextmanager
+def silu_backend(backend_name):
+    _prev_impl = SiLU.silu
+
+    if backend_name == "ninetoothed":
+        impl = ops.ninetoothed.torch.silu
+    elif backend_name == "triton":
+        impl = ops.triton.torch.silu
+    elif backend_name == "torch":
+        impl = F.silu
+    else:
+        raise ValueError(f"unknown backend: `{backend_name}`")
+
+    SiLU.silu = impl
+
+    try:
+        yield
+    finally:
+        SiLU.silu = _prev_impl
 
 
 if __name__ == "__main__":

@@ -1,6 +1,5 @@
-import functools
+from contextlib import contextmanager
 
-import ninetoothed
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,10 +8,14 @@ from transformers.models.llama.modeling_llama import repeat_kv
 
 import ops.ninetoothed.torch
 import ops.triton.torch
-import rope
+from rope import torch_rope
 
 
 class Attention(nn.Module):
+    scaled_dot_product_attention = None
+
+    rope = None
+
     def __init__(self, other):
         super().__init__()
 
@@ -35,9 +38,11 @@ class Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         cos_table, sin_table = position_embeddings
+        sin_table = sin_table[0]
+        cos_table = cos_table[0]
 
-        _rope(query_states, sin_table, cos_table)
-        _rope(key_states, sin_table, cos_table)
+        query_states = type(self).rope(query_states, sin_table, cos_table)
+        key_states = type(self).rope(key_states, sin_table, cos_table)
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -56,13 +61,9 @@ class Attention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_dtype = torch.float16
-        attn_output = ops.ninetoothed.torch.scaled_dot_product_attention(
-            query_states.to(attn_dtype),
-            key_states.to(attn_dtype),
-            value_states.to(attn_dtype),
-            scale=self.scaling,
-        ).to(query_states.dtype)
+        attn_output = type(self).scaled_dot_product_attention(
+            query_states, key_states, value_states, scale=self.scaling
+        )
         attn_output = attn_output.transpose(1, 2)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -71,19 +72,46 @@ class Attention(nn.Module):
         return attn_output, None
 
 
-_rope_kernel = ninetoothed.make(
-    functools.partial(rope.arrangement, interleaved=False),
-    rope.application,
-    rope.tensors,
-)
+@contextmanager
+def scaled_dot_product_attention_backend(backend_name):
+    _prev_impl = Attention.scaled_dot_product_attention
+
+    if backend_name == "ninetoothed":
+        impl = ops.ninetoothed.torch.scaled_dot_product_attention
+    elif backend_name == "triton":
+        impl = ops.triton.torch.scaled_dot_product_attention
+    elif backend_name == "torch":
+        impl = F.scaled_dot_product_attention
+    else:
+        raise ValueError(f"unknown backend: `{backend_name}`")
+
+    Attention.scaled_dot_product_attention = impl
+
+    try:
+        yield
+    finally:
+        Attention.scaled_dot_product_attention = _prev_impl
 
 
-def _rope(x, sin_table, cos_table):
-    _, _, num_heads, _ = x.shape
-    sin_table = sin_table.unsqueeze(2).expand(-1, -1, num_heads, -1)
-    cos_table = cos_table.unsqueeze(2).expand(-1, -1, num_heads, -1)
+@contextmanager
+def rope_backend(backend_name):
+    _prev_impl = Attention.rope
 
-    _rope_kernel(x, sin_table, cos_table)
+    if backend_name == "ninetoothed":
+        impl = ops.ninetoothed.torch.rope
+    elif backend_name == "triton":
+        impl = ops.triton.torch.rope
+    elif backend_name == "torch":
+        impl = torch_rope
+    else:
+        raise ValueError(f"unknown backend: `{backend_name}`")
+
+    Attention.rope = impl
+
+    try:
+        yield
+    finally:
+        Attention.rope = _prev_impl
 
 
 if __name__ == "__main__":
