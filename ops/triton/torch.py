@@ -11,6 +11,7 @@ import ops.triton.kernels.fused_rms_norm
 import ops.triton.kernels.mm
 import ops.triton.kernels.rms_norm
 import ops.triton.kernels.scaled_dot_product_attention
+import ops.triton.kernels.silu
 import ops.triton.kernels.softmax
 
 
@@ -222,6 +223,21 @@ def scaled_dot_product_attention(q, k, v, scale=None):
     )
 
     return o
+
+
+def silu(input):
+    input_flat = input.flatten()
+    output_flat = torch.empty_like(input_flat)
+    num_elements = input_flat.numel()
+
+    def grid(meta):
+        return (triton.cdiv(num_elements, meta["BLOCK_SIZE"]),)
+
+    ops.triton.kernels.silu.kernel[grid](
+        input_flat, output_flat, num_elements, BLOCK_SIZE=1024
+    )
+
+    return output_flat.view_as(input)
 
 
 def softmax(input):

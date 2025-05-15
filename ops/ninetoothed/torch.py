@@ -10,6 +10,7 @@ import ops.ninetoothed.kernels.fused_rms_norm
 import ops.ninetoothed.kernels.mm
 import ops.ninetoothed.kernels.rms_norm
 import ops.ninetoothed.kernels.scaled_dot_product_attention
+import ops.ninetoothed.kernels.silu
 import ops.ninetoothed.kernels.softmax
 
 
@@ -98,6 +99,15 @@ def scaled_dot_product_attention(q, k, v, scale=None):
     ops.ninetoothed.kernels.scaled_dot_product_attention.kernel(q, k, v, scale, o)
 
     return o
+
+
+def silu(input):
+    input_flat = input.flatten()
+    output_flat = torch.empty_like(input_flat)
+
+    ops.ninetoothed.kernels.silu.kernel(input_flat, output_flat, BLOCK_SIZE=1024)
+
+    return output_flat.view_as(input)
 
 
 def softmax(input):
