@@ -1,3 +1,5 @@
+import functools
+
 import ninetoothed
 import torch
 import triton
@@ -42,10 +44,22 @@ def application(tensor, sin_table, cos_table):
 
 
 tensors = tuple(Tensor(4, shape_options={"constexpr": True}) for _ in range(3))
-rope_kernel = ninetoothed.make(arrangement, application, tensors)
+
+interleaved_kernel = ninetoothed.make(
+    functools.partial(arrangement, interleaved=True), application, tensors
+)
+non_interleaved_kernel = ninetoothed.make(
+    functools.partial(arrangement, interleaved=False), application, tensors
+)
 
 
-def rope(tensor, sin_table, cos_table):
+def rope_kernel(tensor, sin_table, cos_table, interleaved=True):
+    return (interleaved_kernel if interleaved else non_interleaved_kernel)(
+        tensor, sin_table, cos_table
+    )
+
+
+def rope(tensor, sin_table, cos_table, interleaved=True):
     batch_size, _, num_heads, _ = tensor.shape
 
     sin_table = sin_table.unsqueeze(1).unsqueeze(0)
@@ -54,7 +68,7 @@ def rope(tensor, sin_table, cos_table):
     cos_table = cos_table.expand(batch_size, -1, num_heads, -1)
 
     tensor_cloned = tensor.clone()
-    rope_kernel(tensor_cloned, sin_table, cos_table)
+    rope_kernel(tensor_cloned, sin_table, cos_table, interleaved)
 
     return tensor_cloned
 
@@ -71,6 +85,7 @@ def triton_rope_kernel(
     sin_table_stride_l,
     cos_table_stride_l,
     emb_dim,
+    INTERLEAVED: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
 ):
     off_n = tl.program_id(0)
@@ -86,17 +101,18 @@ def triton_rope_kernel(
     cos_table = tl.load(cos_table_ptr + off_l * cos_table_stride_l + offs, mask=mask)
 
     even_offs = (
-        off_n * tensor_stride_n
-        + off_l * tensor_stride_l
-        + off_h * tensor_stride_h
-        + (2 * offs) * tensor_stride_e
+        off_n * tensor_stride_n + off_l * tensor_stride_l + off_h * tensor_stride_h
     )
     odd_offs = (
-        off_n * tensor_stride_n
-        + off_l * tensor_stride_l
-        + off_h * tensor_stride_h
-        + (2 * offs + 1) * tensor_stride_e
+        off_n * tensor_stride_n + off_l * tensor_stride_l + off_h * tensor_stride_h
     )
+
+    if INTERLEAVED:
+        even_offs += (2 * offs) * tensor_stride_e
+        odd_offs += (2 * offs + 1) * tensor_stride_e
+    else:
+        even_offs += offs * tensor_stride_e
+        odd_offs += (offs + half_emb_dim) * tensor_stride_e
 
     even_ptrs = tensor_ptr + even_offs
     odd_ptrs = tensor_ptr + odd_offs
@@ -108,9 +124,7 @@ def triton_rope_kernel(
     tl.store(odd_ptrs, even * sin_table + odd * cos_table, mask=mask)
 
 
-def triton_rope(
-    tensor: torch.Tensor, sin_table: torch.Tensor, cos_table: torch.Tensor
-) -> torch.Tensor:
+def triton_rope(tensor, sin_table, cos_table, interleaved=True):
     batch_size, seq_len, num_heads, emb_dim = tensor.shape
 
     assert emb_dim % 2 == 0, "The embedding dimension must be even."
@@ -131,28 +145,35 @@ def triton_rope(
         sin_table.stride(0),
         cos_table.stride(0),
         emb_dim,
+        INTERLEAVED=interleaved,
         BLOCK_SIZE=BLOCK_SIZE,
     )
 
     return tensor_cloned
 
 
-def torch_rope(input, sin_table, cos_table):
+def torch_rope(input, sin_table, cos_table, interleaved=True):
     batch_size, seq_len, num_heads, emb_dim = input.shape
 
     assert emb_dim % 2 == 0, "The embedding dimension must be even."
 
-    pair_wise_input = input.view(batch_size, seq_len, num_heads, emb_dim // 2, 2)
     sin_table = sin_table[None, :, None, :]
     cos_table = cos_table[None, :, None, :]
 
-    pair_0, pair_1 = pair_wise_input[..., 0], pair_wise_input[..., 1]
-    rotated_pair_0 = pair_0 * cos_table - pair_1 * sin_table
-    rotated_pair_1 = pair_0 * sin_table + pair_1 * cos_table
+    if interleaved:
+        pair_wise_input = input.view(batch_size, seq_len, num_heads, emb_dim // 2, 2)
+        input_0, input_1 = pair_wise_input[..., 0], pair_wise_input[..., 1]
+        input_0_rotated = input_0 * cos_table - input_1 * sin_table
+        input_1_rotated = input_0 * sin_table + input_1 * cos_table
 
-    output = torch.stack((rotated_pair_0, rotated_pair_1), dim=-1).view(input.shape)
+        return torch.stack((input_0_rotated, input_1_rotated), dim=-1).view(input.shape)
+    else:
+        input_0 = x[..., : x.shape[-1] // 2]
+        input_1 = x[..., x.shape[-1] // 2 :]
+        input_0_rotated = input_0 * cos_table - input_1 * sin_table
+        input_1_rotated = input_0 * sin_table + input_1 * cos_table
 
-    return output
+        return torch.cat((input_0_rotated, input_1_rotated), dim=-1)
 
 
 def _generate_sin_and_cos_tables(
@@ -181,9 +202,9 @@ if __name__ == "__main__":
     sin_table, cos_table = _generate_sin_and_cos_tables(seq_len, emb_dim)
     x = torch.randn(batch_size, seq_len, num_heads, emb_dim, dtype=dtype, device=device)
 
-    ninetoothed_output = rope(x, sin_table, cos_table)
-    torch_output = torch_rope(x, sin_table, cos_table)
-    triton_output = triton_rope(x, sin_table, cos_table)
+    ninetoothed_output = rope(x, sin_table, cos_table, interleaved=False)
+    torch_output = torch_rope(x, sin_table, cos_table, interleaved=False)
+    triton_output = triton_rope(x, sin_table, cos_table, interleaved=False)
 
     print(ninetoothed_output)
     print(torch_output)
