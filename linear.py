@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from bmm import bmm
+import ops.ninetoothed.torch
 
 
 class Linear(nn.Module):
@@ -10,4 +10,6 @@ class Linear(nn.Module):
         self.__dict__ = other.__dict__
 
     def forward(self, input):
-        return bmm(input, self.weight.T.unsqueeze(0).expand(input.shape[0], -1, -1))
+        return ops.ninetoothed.torch.bmm(
+            input, self.weight.T.unsqueeze(0).expand(input.shape[0], -1, -1)
+        )
