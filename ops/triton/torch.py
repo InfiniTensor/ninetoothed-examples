@@ -13,6 +13,7 @@ import ops.triton.kernels.rms_norm
 import ops.triton.kernels.scaled_dot_product_attention
 import ops.triton.kernels.silu
 import ops.triton.kernels.softmax
+import ops.triton.kernels.swiglu
 
 
 def add(input, other):
@@ -253,3 +254,20 @@ def softmax(input):
     )
 
     return output
+
+
+def swiglu(a, b):
+    a_flat = a.flatten()
+    b_flat = b.flatten()
+    c_flat = torch.empty_like(a_flat)
+
+    num_elements = a_flat.numel()
+
+    def grid(meta):
+        return (triton.cdiv(num_elements, meta["BLOCK_SIZE"]),)
+
+    ops.triton.kernels.swiglu.kernel[grid](
+        a_flat, b_flat, c_flat, num_elements, BLOCK_SIZE=1024
+    )
+
+    return c_flat.view_as(a)

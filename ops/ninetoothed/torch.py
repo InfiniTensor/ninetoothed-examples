@@ -12,6 +12,7 @@ import ops.ninetoothed.kernels.rms_norm
 import ops.ninetoothed.kernels.scaled_dot_product_attention
 import ops.ninetoothed.kernels.silu
 import ops.ninetoothed.kernels.softmax
+import ops.ninetoothed.kernels.swiglu
 
 
 def add(input, other):
@@ -116,3 +117,14 @@ def softmax(input):
     ops.ninetoothed.kernels.softmax.kernel(input, output, BLOCK_SIZE=input.shape[-1])
 
     return output
+
+
+def swiglu(a, b):
+    a_flat = a.flatten()
+    b_flat = b.flatten()
+
+    c = torch.empty_like(a_flat)
+
+    ops.ninetoothed.kernels.swiglu.kernel(a_flat, b_flat, c, BLOCK_SIZE=1024)
+
+    return c.view_as(a)

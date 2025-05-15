@@ -1,66 +1,9 @@
-import ninetoothed
-import ninetoothed.language as ntl
 import torch
 import torch.nn.functional as F
 import triton
-import triton.language as tl
-from ninetoothed import Symbol, Tensor
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
-
-
-@ninetoothed.jit
-def swiglu_kernel(
-    a: Tensor(1).tile((BLOCK_SIZE,)),
-    b: Tensor(1).tile((BLOCK_SIZE,)),
-    c: Tensor(1).tile((BLOCK_SIZE,)),
-):
-    b_loaded = b
-    gate = b_loaded * ntl.sigmoid(ntl.cast(b_loaded, ntl.float32))
-    c = a * gate  # noqa: F841
-
-
-def swiglu(a, b):
-    a_1d = a.flatten()
-    b_1d = b.flatten()
-
-    c = torch.empty_like(a_1d)
-
-    swiglu_kernel(a_1d, b_1d, c, BLOCK_SIZE=1024)
-
-    return c.view_as(a)
-
-
-@triton.jit
-def triton_swiglu_kernel(
-    a_ptr, b_ptr, c_ptr, num_elements: tl.constexpr, BLOCK_SIZE: tl.constexpr
-):
-    pid = tl.program_id(0)
-    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = offsets < num_elements
-
-    a = tl.load(a_ptr + offsets, mask=mask, other=0.0)
-    b = tl.load(b_ptr + offsets, mask=mask, other=0.0)
-
-    silu_b = b * tl.sigmoid(tl.cast(b, tl.float32))
-    c = a * silu_b
-
-    tl.store(c_ptr + offsets, c, mask=mask)
-
-
-def triton_swiglu(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    # Flatten the inputs so that the kernel always works on 1D tensors.
-    a_flat = a.flatten()
-    b_flat = b.flatten()
-    c_flat = torch.empty_like(a_flat)
-    num_elements = a_flat.numel()
-
-    def grid(meta):
-        return (triton.cdiv(num_elements, meta["BLOCK_SIZE"]),)
-
-    triton_swiglu_kernel[grid](a_flat, b_flat, c_flat, num_elements, BLOCK_SIZE=1024)
-
-    return c_flat.view_as(a)
+import ops.ninetoothed.torch
+import ops.triton.torch
 
 
 def torch_swiglu(
@@ -81,9 +24,9 @@ if __name__ == "__main__":
     b = torch.rand(shape, dtype=dtype, device=device)
     c = torch.rand(shape, dtype=dtype, device=device)
 
-    ninetoothed_output = swiglu(a, b)
+    ninetoothed_output = ops.ninetoothed.torch.swiglu(a, b)
     torch_output = torch_swiglu(a, b)
-    triton_output = triton_swiglu(a, b)
+    triton_output = ops.triton.torch.swiglu(a, b)
 
     print(ninetoothed_output)
     print(torch_output)
@@ -119,11 +62,11 @@ if __name__ == "__main__":
         b = torch.rand(shape, dtype=dtype, device=device)
 
         if provider == "ninetoothed":
-            ms = triton.testing.do_bench(lambda: swiglu(a, b))
+            ms = triton.testing.do_bench(lambda: ops.ninetoothed.torch.swiglu(a, b))
         elif provider == "torch":
             ms = triton.testing.do_bench(lambda: torch_swiglu(a, b))
         elif provider == "triton":
-            ms = triton.testing.do_bench(lambda: triton_swiglu(a, b))
+            ms = triton.testing.do_bench(lambda: ops.triton.torch.swiglu(a, b))
 
         return ms
 
