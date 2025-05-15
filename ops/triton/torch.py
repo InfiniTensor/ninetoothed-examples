@@ -7,6 +7,7 @@ import ops.triton.kernels.add
 import ops.triton.kernels.addmm
 import ops.triton.kernels.bmm
 import ops.triton.kernels.conv2d
+import ops.triton.kernels.fused_rms_norm
 import ops.triton.kernels.mm
 import ops.triton.kernels.rms_norm
 import ops.triton.kernels.scaled_dot_product_attention
@@ -119,6 +120,29 @@ def conv2d(input, filter):
     )
 
     return output
+
+
+def fused_rms_norm(x, w, eps=None):
+    if eps is None:
+        eps = torch.finfo(x.dtype).eps
+
+    x_2d = x.view(-1, x.shape[-1])
+    w_2d = w.expand_as(x_2d)
+    y_2d = torch.empty_like(x_2d)
+
+    ops.triton.kernels.fused_rms_norm.kernel[(x_2d.shape[-2],)](
+        x_2d,
+        w_2d,
+        y_2d,
+        x_2d.shape[-1],
+        x_2d.stride(0),
+        w_2d.stride(0),
+        y_2d.stride(0),
+        eps,
+        BLOCK_SIZE=triton.next_power_of_2(x_2d.shape[-1]),
+    )
+
+    return y_2d.view(x.shape)
 
 
 def mm(input, other):

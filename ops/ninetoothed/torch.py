@@ -6,6 +6,7 @@ import ops.ninetoothed.kernels.add
 import ops.ninetoothed.kernels.addmm
 import ops.ninetoothed.kernels.bmm
 import ops.ninetoothed.kernels.conv2d
+import ops.ninetoothed.kernels.fused_rms_norm
 import ops.ninetoothed.kernels.mm
 import ops.ninetoothed.kernels.rms_norm
 import ops.ninetoothed.kernels.scaled_dot_product_attention
@@ -49,6 +50,21 @@ def conv2d(input, filter):
     ops.ninetoothed.kernels.conv2d.kernel(input, filter, output)
 
     return output
+
+
+def fused_rms_norm(x, w, eps=None):
+    if eps is None:
+        eps = torch.finfo(x.dtype).eps()
+
+    x_2d = x.view(-1, x.shape[-1])
+    w_2d = w.expand_as(x_2d)
+    y_2d = torch.empty_like(x_2d)
+
+    ops.ninetoothed.kernels.fused_rms_norm.kernel(
+        x_2d, w_2d, eps, y_2d, BLOCK_SIZE=x.shape[-1]
+    )
+
+    return y_2d.view(x.shape)
 
 
 def mm(input, other):
