@@ -195,7 +195,8 @@ def rms_norm(input, eps=None):
 
 
 def scaled_dot_product_attention(q, k, v, scale=None):
-    batch_size, num_heads, seq_len, emb_dim = q.shape
+    batch_size, num_heads, seq_len_q, emb_dim = q.shape
+    _, _, seq_len_k_v, _ = k.shape
 
     if scale is None:
         scale = 1 / math.sqrt(emb_dim)
@@ -204,7 +205,7 @@ def scaled_dot_product_attention(q, k, v, scale=None):
 
     def grid(meta):
         return (
-            triton.cdiv(seq_len, meta["BLOCK_SIZE_M"]),
+            triton.cdiv(seq_len_q, meta["BLOCK_SIZE_M"]),
             num_heads,
             batch_size,
         )
@@ -219,7 +220,8 @@ def scaled_dot_product_attention(q, k, v, scale=None):
         *v.stride(),
         *o.stride(),
         scale=scale,
-        seq_len=seq_len,
+        seq_len_q=seq_len_q,
+        seq_len_k_v=seq_len_k_v,
         EMB_DIM=emb_dim,
     )
 

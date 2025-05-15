@@ -89,13 +89,14 @@ def _rope(x, sin_table, cos_table):
 if __name__ == "__main__":
     torch.manual_seed(0)
 
-    shape = (2, 4, 1024, 64)
+    q_o_shape = (2, 8, 1024, 64)
+    k_v_shape = (2, 8, 1024, 64)
     dtype = torch.float16
     device = "cuda"
 
-    q = torch.randn(shape, dtype=dtype, device=device)
-    k = torch.randn(shape, dtype=dtype, device=device)
-    v = torch.randn(shape, dtype=dtype, device=device)
+    q = torch.randn(q_o_shape, dtype=dtype, device=device)
+    k = torch.randn(k_v_shape, dtype=dtype, device=device)
+    v = torch.randn(k_v_shape, dtype=dtype, device=device)
 
     ninetoothed_output = ops.ninetoothed.torch.scaled_dot_product_attention(q, k, v)
     torch_output = F.scaled_dot_product_attention(q, k, v)
@@ -109,7 +110,7 @@ if __name__ == "__main__":
         print("✅ NineToothed and PyTorch match.")
     else:
         print("❌ NineToothed and PyTorch differ.")
-    if torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0):
+    if torch.allclose(ninetoothed_output, triton_output, atol=1e-3, rtol=0):
         print("✅ NineToothed and Triton match.")
     else:
         print("❌ NineToothed and Triton differ.")

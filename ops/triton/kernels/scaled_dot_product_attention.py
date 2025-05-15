@@ -48,7 +48,8 @@ def kernel(
     o_stride_m,
     o_stride_n,
     scale,
-    seq_len,
+    seq_len_q,
+    seq_len_k_v,
     EMB_DIM: tl.constexpr,
     BLOCK_SIZE_M: tl.constexpr,
     BLOCK_SIZE_N: tl.constexpr,
@@ -62,7 +63,7 @@ def kernel(
     q_off = off_z * q_stride_z + off_h * q_stride_h
     q_block_ptr = tl.make_block_ptr(
         base=q_ptr + q_off,
-        shape=(seq_len, EMB_DIM),
+        shape=(seq_len_q, EMB_DIM),
         strides=(q_stride_m, q_stride_k),
         offsets=(offs_m_start, 0),
         block_shape=(BLOCK_SIZE_M, EMB_DIM),
@@ -71,7 +72,7 @@ def kernel(
     k_off = off_z * k_stride_z + off_h * k_stride_h
     k_block_ptr = tl.make_block_ptr(
         base=k_ptr + k_off,
-        shape=(EMB_DIM, seq_len),
+        shape=(EMB_DIM, seq_len_k_v),
         strides=(k_stride_k, k_stride_n),
         offsets=(0, 0),
         block_shape=(EMB_DIM, BLOCK_SIZE_N),
@@ -80,7 +81,7 @@ def kernel(
     v_off = off_z * v_stride_z + off_h * v_stride_h
     v_block_ptr = tl.make_block_ptr(
         base=v_ptr + v_off,
-        shape=(seq_len, EMB_DIM),
+        shape=(seq_len_k_v, EMB_DIM),
         strides=(v_stride_k, v_stride_n),
         offsets=(0, 0),
         block_shape=(BLOCK_SIZE_N, EMB_DIM),
@@ -89,7 +90,7 @@ def kernel(
     o_off = off_z * o_stride_z + off_h * o_stride_h
     o_block_ptr = tl.make_block_ptr(
         base=o_ptr + o_off,
-        shape=(seq_len, EMB_DIM),
+        shape=(seq_len_q, EMB_DIM),
         strides=(o_stride_m, o_stride_n),
         offsets=(offs_m_start, 0),
         block_shape=(BLOCK_SIZE_M, EMB_DIM),
@@ -103,10 +104,10 @@ def kernel(
     l_i = tl.full((BLOCK_SIZE_M,), 1, dtype=tl.float32)
     m_i = tl.full((BLOCK_SIZE_M,), float("-inf"), dtype=tl.float32)
 
-    for i in range(0, tl.cdiv(seq_len, BLOCK_SIZE_N)):
+    for i in range(0, tl.cdiv(seq_len_k_v, BLOCK_SIZE_N)):
         k = tl.load(k_block_ptr, boundary_check=(0, 1))
 
-        mask = i * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N) < seq_len
+        mask = i * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N) < seq_len_k_v
         qk = tl.where(mask, tl.dot(q, k), float("-inf"))
 
         m_ij = tl.maximum(m_i, tl.max(qk, 1))
