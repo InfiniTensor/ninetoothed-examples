@@ -12,6 +12,8 @@ _NINETOOTHED_KERNELS_PATH = _OPS_PATH / "ninetoothed" / "kernels"
 
 _TRITON_KERNELS_PATH = _OPS_PATH / "triton" / "kernels"
 
+_BACKSLASH_CHAR = "\\"
+
 
 def _generate_cc_table():
     path = _PARENT_PATH / "cc.json"
@@ -129,7 +131,7 @@ def _generate_table(data, metric_names):
         return str(path / f"{kernel_name}.py").removeprefix(str(_PARENT_PATH))[1:]
 
     data = {
-        f"\\texttt{{{kernel_name.replace('scaled_dot_product_attention', 'sdpa').replace('_', '\\_')}}}": {
+        f"{_BACKSLASH_CHAR}texttt{{{kernel_name.replace('scaled_dot_product_attention', 'sdpa').replace('_', f'{_BACKSLASH_CHAR}_')}}}": {
             "Triton": {
                 metric_name: data[
                     _key_from_kernel_name(_TRITON_KERNELS_PATH, kernel_name)
