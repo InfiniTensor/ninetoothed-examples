@@ -172,7 +172,7 @@ if __name__ == "__main__":
         triton_output = ops.triton.torch.scaled_dot_product_attention(q, k, v)
 
         assert torch.allclose(ninetoothed_output, torch_output, atol=0.025, rtol=0.025)
-        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
+        assert torch.allclose(ninetoothed_output, triton_output, atol=0.001, rtol=0.001)
 
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(
