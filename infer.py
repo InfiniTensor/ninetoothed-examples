@@ -1,4 +1,5 @@
 import argparse
+import json
 import time
 
 import torch
@@ -114,7 +115,20 @@ if __name__ == "__main__":
         end_time = time.time()
 
     strings = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-    avg_time_ms = (end_time - start_time) * 1000 / num_profiling_iterations
 
-    print(strings)
-    print(f"\nAverage inference time: {avg_time_ms:.4f} ms.")
+    average_time = (end_time - start_time) / num_profiling_iterations
+    num_input_tokens = inputs["input_ids"].size(-1)
+    num_output_tokens = outputs.size(-1) - num_input_tokens
+    num_tokens_per_second = num_output_tokens / average_time
+
+    print(
+        json.dumps(
+            {
+                "strings": strings,
+                "average_time": average_time,
+                "num_input_tokens": num_input_tokens,
+                "num_output_tokens": num_output_tokens,
+                "num_tokens_per_second": num_tokens_per_second,
+            }
+        )
+    )
