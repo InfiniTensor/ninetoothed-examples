@@ -19,7 +19,7 @@ def arrangement(input, filter, output):
     return mm.arrangement(input_arranged, filter_arranged, output_arranged)
 
 
-shape_options = {"constexpr": True, "upper_bound": 16}
+shape_options = {"constexpr": True}
 tensors = tuple(Tensor(4, shape_options=shape_options) for _ in range(3))
 
 kernel = ninetoothed.make(arrangement, mm.application, tensors)
