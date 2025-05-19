@@ -8,13 +8,13 @@ from transformers.models.llama.modeling_llama import repeat_kv
 
 import ops.ninetoothed.torch
 import ops.triton.torch
-from rope import torch_rope
+from rotary_position_embedding import torch_rotary_position_embedding
 
 
 class Attention(nn.Module):
     scaled_dot_product_attention = None
 
-    rope = None
+    rotary_position_embedding = None
 
     def __init__(self, other):
         super().__init__()
@@ -41,8 +41,12 @@ class Attention(nn.Module):
         sin_table = sin_table[0]
         cos_table = cos_table[0]
 
-        query_states = type(self).rope(query_states, sin_table, cos_table)
-        key_states = type(self).rope(key_states, sin_table, cos_table)
+        query_states = type(self).rotary_position_embedding(
+            query_states, sin_table, cos_table
+        )
+        key_states = type(self).rotary_position_embedding(
+            key_states, sin_table, cos_table
+        )
 
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
@@ -94,24 +98,24 @@ def scaled_dot_product_attention_backend(backend_name):
 
 
 @contextmanager
-def rope_backend(backend_name):
-    _prev_impl = Attention.rope
+def rotary_position_embedding_backend(backend_name):
+    _prev_impl = Attention.rotary_position_embedding
 
     if backend_name == "ninetoothed":
-        impl = ops.ninetoothed.torch.rope
+        impl = ops.ninetoothed.torch.rotary_position_embedding
     elif backend_name == "triton":
-        impl = ops.triton.torch.rope
+        impl = ops.triton.torch.rotary_position_embedding
     elif backend_name == "torch":
-        impl = torch_rope
+        impl = torch_rotary_position_embedding
     else:
         raise ValueError(f"unknown backend: `{backend_name}`")
 
-    Attention.rope = impl
+    Attention.rotary_position_embedding = impl
 
     try:
         yield
     finally:
-        Attention.rope = _prev_impl
+        Attention.rotary_position_embedding = _prev_impl
 
 
 if __name__ == "__main__":

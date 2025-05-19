@@ -10,7 +10,7 @@ import ops.triton.kernels.conv2d
 import ops.triton.kernels.fused_rms_norm
 import ops.triton.kernels.mm
 import ops.triton.kernels.rms_norm
-import ops.triton.kernels.rope
+import ops.triton.kernels.rotary_position_embedding
 import ops.triton.kernels.scaled_dot_product_attention
 import ops.triton.kernels.silu
 import ops.triton.kernels.softmax
@@ -195,14 +195,16 @@ def rms_norm(input, eps=None):
     return output
 
 
-def rope(input, sin_table, cos_table, interleaved=True):
+def rotary_position_embedding(input, sin_table, cos_table, interleaved=True):
     batch_size, seq_len, num_heads, emb_dim = input.shape
 
     BLOCK_SIZE = triton.next_power_of_2(emb_dim // 2)
 
     output = input.clone()
 
-    ops.triton.kernels.rope.kernel[(batch_size, seq_len, num_heads)](
+    ops.triton.kernels.rotary_position_embedding.kernel[
+        (batch_size, seq_len, num_heads)
+    ](
         output,
         sin_table,
         cos_table,

@@ -9,7 +9,7 @@ import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.fused_rms_norm
 import ops.ninetoothed.kernels.mm
 import ops.ninetoothed.kernels.rms_norm
-import ops.ninetoothed.kernels.rope
+import ops.ninetoothed.kernels.rotary_position_embedding
 import ops.ninetoothed.kernels.scaled_dot_product_attention
 import ops.ninetoothed.kernels.silu
 import ops.ninetoothed.kernels.softmax
@@ -92,14 +92,16 @@ def rms_norm(input, eps=None):
     return output
 
 
-def rope(input, sin_table, cos_table, interleaved=True):
+def rotary_position_embedding(input, sin_table, cos_table, interleaved=True):
     batch_size, _, num_heads, _ = input.shape
 
     output = input.clone()
     sin_table = sin_table[None, :, None, :].expand(batch_size, -1, num_heads, -1)
     cos_table = cos_table[None, :, None, :].expand(batch_size, -1, num_heads, -1)
 
-    ops.ninetoothed.kernels.rope.kernel(output, sin_table, cos_table, interleaved)
+    ops.ninetoothed.kernels.rotary_position_embedding.kernel(
+        output, sin_table, cos_table, interleaved
+    )
 
     return output
 

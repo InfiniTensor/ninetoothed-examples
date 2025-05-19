@@ -9,7 +9,7 @@ from fused_rms_norm import RMSNorm, rms_norm_backend
 from linear import Linear, bmm_backend
 from scaled_dot_product_attention import (
     Attention,
-    rope_backend,
+    rotary_position_embedding_backend,
     scaled_dot_product_attention_backend,
 )
 from silu import SiLU, silu_backend
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     with (
         bmm_backend(backend),
         rms_norm_backend(backend),
-        rope_backend(backend),
+        rotary_position_embedding_backend(backend),
         scaled_dot_product_attention_backend(backend),
         silu_backend(backend),
     ):

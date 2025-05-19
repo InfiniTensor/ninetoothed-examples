@@ -131,7 +131,7 @@ def _generate_table(data, metric_names):
         return str(path / f"{kernel_name}.py").removeprefix(str(_PARENT_PATH))[1:]
 
     data = {
-        f"{_BACKSLASH_CHAR}texttt{{{kernel_name.replace('scaled_dot_product_attention', 'sdpa').replace('_', f'{_BACKSLASH_CHAR}_')}}}": {
+        f"{_BACKSLASH_CHAR}texttt{{{kernel_name.replace('scaled_dot_product_attention', 'sdpa').replace('rotary_position_embedding', 'rope').replace('_', f'{_BACKSLASH_CHAR}_')}}}": {
             "Triton": {
                 metric_name: data[
                     _key_from_kernel_name(_TRITON_KERNELS_PATH, kernel_name)
