@@ -1,3 +1,4 @@
+import functools
 import json
 import os.path
 from pathlib import Path
@@ -32,9 +33,7 @@ def _generate_cc_table():
 
     df = _generate_table(data, metric_names.values())
 
-    styled_df = df.style.apply(_highlight_minimum, axis=None).format(precision=2)
-
-    return styled_df.to_latex(hrules=True, multicol_align="c", convert_css=True)
+    return df
 
 
 def _generate_mi_table():
@@ -55,9 +54,7 @@ def _generate_mi_table():
 
     df = _generate_table(data, metric_names.values())
 
-    styled_df = df.style.apply(_highlight_maximum, axis=None).format(precision=2)
-
-    return styled_df.to_latex(hrules=True, multicol_align="c", convert_css=True)
+    return df
 
 
 def _generate_raw_table():
@@ -78,27 +75,17 @@ def _generate_raw_table():
 
     df = _generate_table(data, metric_names.values())
 
-    styled_df = df.style.apply(_highlight_minimum, axis=None).format(precision=2)
-
-    return styled_df.to_latex(hrules=True, multicol_align="c", convert_css=True)
+    return df
 
 
 def _generate_hal_table():
     path = _PARENT_PATH / "hal.json"
 
     metric_names = {
-        "h1": "$\\eta_1$",
-        "h2": "$\\eta_2$",
-        "N1": "$N_1$",
-        "N2": "$N_2$",
         "vocabulary": "$\\eta$",
         "length": "$N$",
-        "calculated_length": "$\\hat{N}$",
         "volume": "$V$",
         "difficulty": "$D$",
-        "effort": "$E$",
-        "time": "$T$",
-        "bugs": "$B$",
     }
 
     data = json.loads(path.read_text())
@@ -114,9 +101,7 @@ def _generate_hal_table():
 
     df = _generate_table(data, metric_names.values())
 
-    styled_df = df.style.apply(_highlight_minimum, axis=None).format(precision=2)
-
-    return styled_df.to_latex(hrules=True, multicol_align="c", convert_css=True)
+    return df
 
 
 def _generate_table(data, metric_names):
@@ -162,37 +147,39 @@ def _generate_table(data, metric_names):
     return df
 
 
-def _highlight_minimum(df):
-    styles = pd.DataFrame("", index=df.index, columns=df.columns)
+def _highlight(df):
+    new_df = pd.DataFrame("", index=df.index, columns=df.columns)
 
-    for kernel, group in df.groupby(level=0):
+    for _, group in df[
+        ["LOC", "LLOC", "SLOC", "$G$", "$\\eta$", "$N$", "$V$", "$D$"]
+    ].groupby(level=0):
         mask = group == group.min()
 
-        styles.update(
+        new_df.update(
             mask.replace(True, "background-color: green!20").replace(False, "")
         )
 
-    return styles
-
-
-def _highlight_maximum(df):
-    styles = pd.DataFrame("", index=df.index, columns=df.columns)
-
-    for kernel, group in df.groupby(level=0):
+    for _, group in df[["$MI$"]].groupby(level=0):
         mask = group == group.max()
 
-        styles.update(
+        new_df.update(
             mask.replace(True, "background-color: green!20").replace(False, "")
         )
 
-    return styles
+    return new_df
 
 
 if __name__ == "__main__":
-    for latex_code in (
-        _generate_cc_table(),
-        _generate_mi_table(),
-        _generate_raw_table(),
-        _generate_hal_table(),
-    ):
-        print(latex_code)
+    raw_table = _generate_raw_table()
+    cc_table = _generate_cc_table()
+    hal_table = _generate_hal_table()
+    mi_table = _generate_mi_table()
+
+    df = functools.reduce(
+        lambda left, right: pd.merge(left, right, left_index=True, right_index=True),
+        (raw_table, cc_table, hal_table, mi_table),
+    )
+
+    styler = df.style.apply(_highlight, axis=None).format(precision=2)
+
+    print(styler.to_latex(hrules=True, multicol_align="c", convert_css=True))
