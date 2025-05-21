@@ -20,9 +20,9 @@ if __name__ == "__main__":
     dtype = torch.float16
     device = "cuda"
 
-    a = torch.rand(shape, dtype=dtype, device=device)
-    b = torch.rand(shape, dtype=dtype, device=device)
-    c = torch.rand(shape, dtype=dtype, device=device)
+    a = torch.randn(shape, dtype=dtype, device=device)
+    b = torch.randn(shape, dtype=dtype, device=device)
+    c = torch.randn(shape, dtype=dtype, device=device)
 
     ninetoothed_output = ops.ninetoothed.torch.swiglu(a, b)
     torch_output = torch_swiglu(a, b)
@@ -58,8 +58,8 @@ if __name__ == "__main__":
     def benchmark(m, n, provider):
         shape = (m, n)
 
-        a = torch.rand(shape, dtype=dtype, device=device)
-        b = torch.rand(shape, dtype=dtype, device=device)
+        a = torch.randn(shape, dtype=dtype, device=device)
+        b = torch.randn(shape, dtype=dtype, device=device)
 
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(lambda: ops.ninetoothed.torch.swiglu(a, b))

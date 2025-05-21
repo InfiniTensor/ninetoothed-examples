@@ -11,8 +11,8 @@ if __name__ == "__main__":
     dtype = torch.float16
     device = "cuda"
 
-    input = torch.rand(size, dtype=dtype, device=device)
-    other = torch.rand(size, dtype=dtype, device=device)
+    input = torch.randn(size, dtype=dtype, device=device)
+    other = torch.randn(size, dtype=dtype, device=device)
 
     ninetoothed_output = ops.ninetoothed.torch.add(input, other)
     torch_output = input + other
