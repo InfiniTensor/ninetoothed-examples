@@ -43,7 +43,7 @@ if __name__ == "__main__":
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
             ylabel="ms",
-            plot_name="2d-convolution-performance",
+            plot_name="conv2d-performance",
             args={},
         )
     )

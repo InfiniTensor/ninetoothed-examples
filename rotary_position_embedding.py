@@ -87,7 +87,7 @@ if __name__ == "__main__":
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
             ylabel="ms",
-            plot_name="rotary_position_embedding-performance",
+            plot_name="rotary-position-embedding-performance",
             args={},
         )
     )

@@ -41,7 +41,7 @@ if __name__ == "__main__":
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
             ylabel="ms",
-            plot_name="vector-addition-performance",
+            plot_name="add-performance",
             args={},
         )
     )

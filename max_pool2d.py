@@ -78,7 +78,7 @@ if __name__ == "__main__":
             line_names=["NineToothed", "PyTorch"],
             styles=[("blue", "-"), ("green", "-")],
             ylabel="ms",
-            plot_name="2d-max-pooling-performance",
+            plot_name="max-pool2d-performance",
             args={},
         )
     )
