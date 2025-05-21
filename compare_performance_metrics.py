@@ -1,7 +1,10 @@
+import json
+
 import matplotlib.pyplot as plt
 import pandas as pd
 
 from compare_code_metrics import _BACKSLASH_CHAR
+from run_experiments import ALL_MAX_NEW_TOKENS, BACKENDS
 
 if __name__ == "__main__":
     plt.rcParams["figure.dpi"] = 600
@@ -20,3 +23,28 @@ if __name__ == "__main__":
     plt.grid(False)
     plt.tight_layout()
     plt.savefig("performance-metrics.png")
+
+    data = {"Output Length": [], "NineToothed": [], "Triton": [], "PyTorch": []}
+
+    for max_new_tokens in ALL_MAX_NEW_TOKENS:
+        data["Output Length"].append(max_new_tokens)
+
+        for backend in BACKENDS:
+            with open(f"infer_{max_new_tokens}_{backend}.json") as f:
+                num_tokens_per_second = json.load(f)["num_tokens_per_second"]
+
+            if backend == "ninetoothed":
+                data["NineToothed"].append(num_tokens_per_second)
+            elif backend == "triton":
+                data["Triton"].append(num_tokens_per_second)
+            elif backend == "torch":
+                data["PyTorch"].append(num_tokens_per_second)
+
+    df = pd.DataFrame(data)
+
+    df.set_index("Output Length").plot(kind="bar", rot=0)
+    plt.ylabel("Throughput (TPS)")
+    plt.xlabel("Output Length")
+    plt.grid(False)
+    plt.tight_layout()
+    plt.savefig("end-to-end-performance-metrics.png")
