@@ -155,7 +155,7 @@ if __name__ == "__main__":
         for i, provider in enumerate(("NineToothed", "Triton", "PyTorch")):
             data[provider].append(results[i])
 
-        pd.DataFrame(data).set_index("Task").to_csv("performance-metrics.csv")
+        pd.DataFrame(data).set_index("Task").to_csv("microbenchmark_data.csv")
 
     for max_new_tokens in ALL_MAX_NEW_TOKENS:
         for backend in BACKENDS:

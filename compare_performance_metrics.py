@@ -10,7 +10,7 @@ if __name__ == "__main__":
     plt.rcParams["figure.dpi"] = 600
     plt.rcParams["font.family"] = "Linux Biolinum"
 
-    df = pd.read_csv("performance-metrics.csv")
+    df = pd.read_csv("microbenchmark_data.csv")
 
     for task in df["Task"]:
         latex_item = f"\item {_BACKSLASH_CHAR}texttt{{{task.replace('scaled_dot_product_attention', 'sdpa').replace('rotary_position_embedding', 'rope').replace('_', f'{_BACKSLASH_CHAR}_')}}}"
