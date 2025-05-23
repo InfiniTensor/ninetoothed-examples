@@ -100,6 +100,11 @@ if __name__ == "__main__":
     random.seed(0)
     torch.manual_seed(0)
 
+    with open("torch.utils.collect_env.log", "w") as f:
+        subprocess.run(
+            ("python", "-m", "torch.utils.collect_env"), stdout=f, stderr=f, check=True
+        )
+
     radon_commands = (
         (
             "radon",
