@@ -22,7 +22,7 @@ if __name__ == "__main__":
     plt.xlabel("Task")
     plt.grid(False)
     plt.tight_layout()
-    plt.savefig("performance-metrics.png")
+    plt.savefig("microbenchmark-results.png")
 
     data = {"Output Length": [], "NineToothed": [], "Triton": [], "PyTorch": []}
 
@@ -47,4 +47,4 @@ if __name__ == "__main__":
     plt.xlabel("Output Length")
     plt.grid(False)
     plt.tight_layout()
-    plt.savefig("end-to-end-performance-metrics.png")
+    plt.savefig("benchmark-results.png")
