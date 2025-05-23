@@ -118,8 +118,8 @@ if __name__ == "__main__":
     for command in radon_commands:
         subprocess.run(command, check=True)
 
-    with open("code_metrics.tex", "w") as f:
-        subprocess.run(("python", "compare_code_metrics.py"), stdout=f, check=True)
+    with open("code_evaluation.tex", "w") as f:
+        subprocess.run(("python", "evaluate_code.py"), stdout=f, check=True)
 
     dtype = torch.float16
     device = "cuda"
@@ -183,7 +183,5 @@ if __name__ == "__main__":
                     check=True,
                 )
 
-    with open("performance_metrics.tex", "w") as f:
-        subprocess.run(
-            ("python", "compare_performance_metrics.py"), stdout=f, check=True
-        )
+    with open("performance_evaluation.tex", "w") as f:
+        subprocess.run(("python", "evaluate_performance.py"), stdout=f, check=True)

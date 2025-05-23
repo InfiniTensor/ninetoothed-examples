@@ -3,7 +3,7 @@ import json
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from compare_code_metrics import _BACKSLASH_CHAR
+from evaluate_code import _BACKSLASH_CHAR
 from run_experiments import ALL_MAX_NEW_TOKENS, BACKENDS
 
 if __name__ == "__main__":
