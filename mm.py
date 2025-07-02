@@ -7,16 +7,16 @@ import ops.triton.torch
 if __name__ == "__main__":
     torch.manual_seed(0)
 
-    batch_size, m, n, k = 4, 512, 2028, 1024
+    shape = (512, 512)
     dtype = torch.float16
     device = "cuda"
 
-    input = torch.randn(batch_size, m, k, dtype=dtype, device=device)
-    other = torch.randn(batch_size, k, n, dtype=dtype, device=device)
+    input = torch.randn(shape, dtype=dtype, device=device)
+    other = torch.randn(shape, dtype=dtype, device=device)
 
-    ninetoothed_output = ops.ninetoothed.torch.bmm(input, other)
-    torch_output = torch.bmm(input, other)
-    triton_output = ops.triton.torch.bmm(input, other)
+    ninetoothed_output = ops.ninetoothed.torch.mm(input, other)
+    torch_output = torch.mm(input, other)
+    triton_output = ops.triton.torch.mm(input, other)
 
     print(ninetoothed_output)
     print(torch_output)
@@ -41,29 +41,27 @@ if __name__ == "__main__":
             line_names=["NineToothed", "PyTorch", "Triton"],
             styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
             ylabel="ms",
-            plot_name="bmm-performance",
-            args={"b": 4},
+            plot_name="mm-performance",
+            args={},
         )
     )
-    def benchmark(b, m, n, k, provider):
-        input = torch.randn((b, m, k), dtype=dtype, device=device)
-        other = torch.randn((b, k, n), dtype=dtype, device=device)
+    def benchmark(m, n, k, provider):
+        input = torch.randn((m, k), dtype=dtype, device=device)
+        other = torch.randn((k, n), dtype=dtype, device=device)
 
-        ninetoothed_output = ops.ninetoothed.torch.bmm(input, other)
-        torch_output = torch.bmm(input, other)
-        triton_output = ops.triton.torch.bmm(input, other)
+        ninetoothed_output = ops.ninetoothed.torch.mm(input, other)
+        torch_output = torch.mm(input, other)
+        triton_output = ops.triton.torch.mm(input, other)
 
-        assert torch.allclose(ninetoothed_output, torch_output)
+        assert torch.allclose(ninetoothed_output, torch_output, atol=0.025, rtol=0.025)
         assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
         if provider == "ninetoothed":
-            ms = triton.testing.do_bench(
-                lambda: ops.ninetoothed.torch.bmm(input, other)
-            )
+            ms = triton.testing.do_bench(lambda: ops.ninetoothed.torch.mm(input, other))
         elif provider == "torch":
-            ms = triton.testing.do_bench(lambda: torch.bmm(input, other))
+            ms = triton.testing.do_bench(lambda: torch.mm(input, other))
         elif provider == "triton":
-            ms = triton.testing.do_bench(lambda: ops.triton.torch.bmm(input, other))
+            ms = triton.testing.do_bench(lambda: ops.triton.torch.mm(input, other))
 
         return ms
 

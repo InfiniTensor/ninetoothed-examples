@@ -1,41 +1,68 @@
-import ninetoothed
-import ninetoothed.language as ntl
 import torch
-import torch.nn as nn
-from ninetoothed import Symbol, Tensor
+import torch.nn.functional as F
+import triton
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
+import ops.ninetoothed.torch
+import ops.triton.torch
 
+if __name__ == "__main__":
+    torch.manual_seed(0)
 
-@ninetoothed.jit
-def fused_rms_norm_kernel(
-    x: Tensor(2).tile((1, BLOCK_SIZE)),
-    w: Tensor(2).tile((1, BLOCK_SIZE)),
-    y: Tensor(2).tile((1, BLOCK_SIZE)),
-    eps: Tensor(0),
-):
-    x_fp32 = ntl.cast(x, ntl.float32)
-    y = x_fp32 * ntl.rsqrt(ntl.sum(x_fp32 * x_fp32) / x.shape[-1] + eps) * w  # noqa: F841
+    dtype = torch.float16
+    device = "cuda"
 
+    input = torch.randn(1151, 8192, dtype=dtype, device=device)
 
-def fused_rms_norm(x, w, eps=None):
-    if eps is None:
-        eps = torch.finfo(x.dtype).eps()
+    ninetoothed_output = ops.ninetoothed.torch.rms_norm(input)
+    torch_output = F.rms_norm(input, input.shape[-1:])
+    triton_output = ops.triton.torch.rms_norm(input)
 
-    x_2d = x.view(-1, x.shape[-1])
-    w_2d = w.expand_as(x_2d)
-    y_2d = torch.empty_like(x_2d)
+    print(ninetoothed_output)
+    print(torch_output)
+    print(triton_output)
 
-    fused_rms_norm_kernel(x_2d, w_2d, y_2d, eps, BLOCK_SIZE=x.shape[-1])
+    if torch.allclose(ninetoothed_output, torch_output, atol=0.001, rtol=0.005):
+        print("✅ NineToothed and PyTorch match.")
+    else:
+        print("❌ NineToothed and PyTorch differ.")
+    if torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0):
+        print("✅ NineToothed and Triton match.")
+    else:
+        print("❌ NineToothed and Triton differ.")
 
-    return y_2d.view(x.shape)
+    @triton.testing.perf_report(
+        triton.testing.Benchmark(
+            x_names=["n"],
+            x_vals=[2**i for i in range(5, 15)],
+            x_log=True,
+            line_arg="provider",
+            line_vals=["ninetoothed", "torch", "triton"],
+            line_names=["NineToothed", "PyTorch", "Triton"],
+            styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
+            ylabel="ms",
+            plot_name="rms-norm-performance",
+            args={"m": 4096},
+        )
+    )
+    def benchmark(m, n, provider):
+        input = torch.randn(m, n, dtype=dtype, device=device)
 
+        ninetoothed_output = ops.ninetoothed.torch.rms_norm(input)
+        torch_output = F.rms_norm(input, input.shape[-1:])
+        triton_output = ops.triton.torch.rms_norm(input)
 
-class RMSNorm(nn.Module):
-    def __init__(self, other):
-        super().__init__()
+        assert torch.allclose(ninetoothed_output, torch_output, atol=0.001, rtol=0.005)
+        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
 
-        self.__dict__ = other.__dict__
+        if provider == "ninetoothed":
+            ms = triton.testing.do_bench(lambda: ops.ninetoothed.torch.rms_norm(input))
+        elif provider == "torch":
+            ms = triton.testing.do_bench(
+                lambda: torch.rms_norm(input, input.shape[-1:])
+            )
+        elif provider == "triton":
+            ms = triton.testing.do_bench(lambda: ops.triton.torch.rms_norm(input))
 
-    def forward(self, x):
-        return fused_rms_norm(x, self.weight, self.variance_epsilon)
+        return ms
+
+    benchmark.run(show_plots=True, print_data=True, save_path=".")

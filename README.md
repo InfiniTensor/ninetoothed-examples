@@ -1,18 +1,20 @@
 # NineToothed Examples
 
-This repository contains examples for [NineToothed](https://github.com/InfiniTensor/ninetoothed), including implementations of several common compute kernels written using NineToothed.
+This repository contains examples of [NineToothed](https://github.com/InfiniTensor/ninetoothed), including implementations of several common compute kernels written using NineToothed.
 
 ## Usage
 
 After cloning this repository, you can run any of the examples using Python. For instance, to run the matrix multiplication example, execute the following command:
 
 ```bash
-python matmul.py
+python mm.py
 ```
 
 ### Autotuning Behavior
 
-By default, the examples apply autotuning, which may take several minutes or longer to complete for complex kernels. If you wish to disable autotuning, you can replace symbol definitions with concrete values. Consider the following example:
+Some examples apply autotuning, which may take several minutes or longer to complete for complex kernels. If you wish to disable autotuning, you can replace symbol definitions with concrete values.
+
+Consider the following example:
 
 ```python
 BLOCK_SIZE = Symbol("BLOCK_SIZE", meta=True)
@@ -28,6 +30,8 @@ BLOCK_SIZE = 1024
 ```
 
 These approaches allow you to obtain results in seconds. However, selecting optimal values is crucial for good performance. Experiment with different values to determine the best configuration.
+
+Note: Please don't forget to also disable the autotuning of the corresponding Triton compute kernels.
 
 ## Third-Party Code and Licenses
 

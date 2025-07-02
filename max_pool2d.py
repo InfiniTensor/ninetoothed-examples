@@ -52,13 +52,18 @@ def max_pool2d(input, window_shape):
 
 if __name__ == "__main__":
     torch.manual_seed(0)
+
     input_shape = (32, 3, 64, 64)
     window_shape = (3, 3)
+
     input = torch.randn(input_shape, dtype=torch.float16, device="cuda")
+
     ninetoothed_output = max_pool2d(input, window_shape)
     torch_output = F.max_pool2d(input, window_shape, ceil_mode=True)
+
     print(ninetoothed_output)
     print(torch_output)
+
     if torch.allclose(ninetoothed_output, torch_output):
         print("✅ NineToothed and PyTorch match.")
     else:
@@ -72,8 +77,8 @@ if __name__ == "__main__":
             line_vals=["ninetoothed", "torch"],
             line_names=["NineToothed", "PyTorch"],
             styles=[("blue", "-"), ("green", "-")],
-            ylabel="GB/s",
-            plot_name="2d-max-pooling-performance",
+            ylabel="ms",
+            plot_name="max-pool2d-performance",
             args={},
         )
     )
@@ -90,9 +95,6 @@ if __name__ == "__main__":
         elif provider == "torch":
             ms = triton.testing.do_bench(lambda: F.max_pool2d(input, window_shape))
 
-        def gbps(ms):
-            return 2 * input.numel() * input.element_size() / ms * 1e-6
-
-        return gbps(ms)
+        return ms
 
     benchmark.run(show_plots=True, print_data=True, save_path=".")
