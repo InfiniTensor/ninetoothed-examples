@@ -3,6 +3,7 @@ import math
 import torch
 
 import ops.ninetoothed.kernels.add
+import ops.ninetoothed.kernels.add_1
 import ops.ninetoothed.kernels.addmm
 import ops.ninetoothed.kernels.bmm
 import ops.ninetoothed.kernels.conv2d
@@ -16,10 +17,13 @@ import ops.ninetoothed.kernels.softmax
 import ops.ninetoothed.kernels.swiglu
 
 
-def add(input, other):
+def add(input, other, impl_id=0):
     output = torch.empty_like(input)
 
-    ops.ninetoothed.kernels.add.kernel(input, other, output, BLOCK_SIZE=1024)
+    if impl_id == 0:
+        ops.ninetoothed.kernels.add.kernel(input, other, output, BLOCK_SIZE=1024)
+    else:
+        ops.ninetoothed.kernels.add_1.kernels[input.ndim](input, other, output)
 
     return output
 
