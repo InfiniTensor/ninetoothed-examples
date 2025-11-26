@@ -9,6 +9,7 @@ import ops.ninetoothed.kernels.bmm
 import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.fused_rms_norm
 import ops.ninetoothed.kernels.mm
+import ops.ninetoothed.kernels.mm_1
 import ops.ninetoothed.kernels.rms_norm
 import ops.ninetoothed.kernels.rotary_position_embedding
 import ops.ninetoothed.kernels.scaled_dot_product_attention
@@ -75,11 +76,14 @@ def fused_rms_norm(x, w, eps=None):
     return y_2d.view(x.shape)
 
 
-def mm(input, other):
+def mm(input, other, impl_id=0):
     output_shape = (input.shape[0], other.shape[1])
     output = torch.empty(output_shape, dtype=input.dtype, device=input.device)
 
-    ops.ninetoothed.kernels.mm.kernel(input, other, output)
+    if impl_id == 0:
+        ops.ninetoothed.kernels.mm.kernel(input, other, output)
+    else:
+        ops.ninetoothed.kernels.mm_1.kernel(input, other, output)
 
     return output
 
