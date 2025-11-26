@@ -14,6 +14,7 @@ import ops.ninetoothed.kernels.rotary_position_embedding
 import ops.ninetoothed.kernels.scaled_dot_product_attention
 import ops.ninetoothed.kernels.silu
 import ops.ninetoothed.kernels.softmax
+import ops.ninetoothed.kernels.softmax_1
 import ops.ninetoothed.kernels.swiglu
 
 
@@ -130,10 +131,15 @@ def silu(input):
     return output_flat.view_as(input)
 
 
-def softmax(input):
+def softmax(input, impl_id=0):
     output = torch.empty_like(input)
 
-    ops.ninetoothed.kernels.softmax.kernel(input, output, BLOCK_SIZE=input.shape[-1])
+    if impl_id == 0:
+        ops.ninetoothed.kernels.softmax.kernel(
+            input, output, BLOCK_SIZE=input.shape[-1]
+        )
+    else:
+        ops.ninetoothed.kernels.softmax_1.kernels[(input.ndim, (-1,))](input, output)
 
     return output
 
