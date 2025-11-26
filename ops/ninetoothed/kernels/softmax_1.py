@@ -5,7 +5,13 @@ import ninetoothed.language as ntl
 from ninetoothed import Tensor
 
 from ops.ninetoothed.kernels.reduction import arrangement
-from ops.ninetoothed.kernels.utils import MAX_NDIM, MAX_NUM_CONFIGS, MIN_NDIM
+from ops.ninetoothed.kernels.utils import (
+    MAX_NDIM,
+    MAX_NUM_CONFIGS,
+    MIN_NDIM,
+    NUM_STAGES,
+    NUM_WARPS,
+)
 
 
 def application(input, output):
@@ -33,7 +39,12 @@ def _make(ndim, dim):
     tensors = (Tensor(ndim, other=float("-inf")), Tensor(ndim))
 
     return ninetoothed.make(
-        arrangement_, application, tensors, max_num_configs=MAX_NUM_CONFIGS
+        arrangement_,
+        application,
+        tensors,
+        num_warps=NUM_WARPS,
+        num_stages=NUM_STAGES,
+        max_num_configs=MAX_NUM_CONFIGS,
     )
 
 
