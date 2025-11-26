@@ -12,7 +12,7 @@ def ninetoothed_add_add_add(a, b, c, d, use_fused=True):
     return ninetoothed_add_add_add_unfused(a, b, c, d)
 
 
-@torch.compile(backend=ninetoothed.fuse)
+@torch.compile(backend=ninetoothed.fuser)
 def ninetoothed_add_add_add_fused(a, b, c, d):
     return ninetoothed_add_add_add_unfused(a, b, c, d)
 

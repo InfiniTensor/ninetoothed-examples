@@ -12,7 +12,7 @@ def ninetoothed_softmax_mm(a, b, use_fused=True):
     return ninetoothed_softmax_mm_unfused(a, b)
 
 
-@torch.compile(backend=ninetoothed.fuse)
+@torch.compile(backend=ninetoothed.fuser)
 def ninetoothed_softmax_mm_fused(a, b):
     return ninetoothed_softmax_mm_unfused(a, b)
 
