@@ -1,13 +1,10 @@
 import ninetoothed
 import ninetoothed.language as ntl
-from ninetoothed import Tensor, block_size
+from ninetoothed import Tensor
 
 import ops.ninetoothed.kernels.mm as mm
+from ops.ninetoothed.kernels.mm_1 import BLOCK_SIZE_K, BLOCK_SIZE_M, BLOCK_SIZE_N
 from ops.ninetoothed.kernels.utils import MAX_NUM_CONFIGS, NUM_STAGES, NUM_WARPS
-
-BLOCK_SIZE_M = block_size(lower_bound=1)
-BLOCK_SIZE_N = block_size(lower_bound=1)
-BLOCK_SIZE_K = block_size(lower_bound=16)
 
 
 def arrangement(
