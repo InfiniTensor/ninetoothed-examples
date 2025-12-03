@@ -26,7 +26,7 @@ def ninetoothed_softmax(a):
 
 
 def ninetoothed_mm(a, b):
-    return ops.ninetoothed.torch.mm(a, b, impl_id=2)
+    return ops.ninetoothed.torch.mm(a, b, impl_id=1)
 
 
 def torch_mm_softmax(a, b, use_compiled=True):
