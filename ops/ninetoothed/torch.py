@@ -10,6 +10,7 @@ import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.fused_rms_norm
 import ops.ninetoothed.kernels.mm
 import ops.ninetoothed.kernels.mm_1
+import ops.ninetoothed.kernels.mm_2
 import ops.ninetoothed.kernels.rms_norm
 import ops.ninetoothed.kernels.rotary_position_embedding
 import ops.ninetoothed.kernels.scaled_dot_product_attention
@@ -82,8 +83,10 @@ def mm(input, other, impl_id=0):
 
     if impl_id == 0:
         ops.ninetoothed.kernels.mm.kernel(input, other, output)
-    else:
+    elif impl_id == 1:
         ops.ninetoothed.kernels.mm_1.kernel(input, other, output)
+    else:
+        ops.ninetoothed.kernels.mm_2.kernel(input, other, output)
 
     return output
 
