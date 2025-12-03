@@ -1,6 +1,5 @@
 import ninetoothed
 import ninetoothed.language as ntl
-from ninetoothed import Tensor
 
 import ops.ninetoothed.kernels.mm as mm
 from ops.ninetoothed.kernels.mm_1 import BLOCK_SIZE_K, BLOCK_SIZE_M, BLOCK_SIZE_N
@@ -46,7 +45,7 @@ def application(input, other, output):
         output[i] = accumulator
 
 
-tensors = (Tensor(2), Tensor(2), Tensor(2))
+tensors = mm.tensors
 
 kernel = ninetoothed.make(
     arrangement,
