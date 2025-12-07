@@ -38,14 +38,14 @@ class Attention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape)
 
         cos_table, sin_table = position_embeddings
-        sin_table = sin_table[0]
-        cos_table = cos_table[0]
+        sin_table = sin_table[0, ..., sin_table.shape[-1] // 2 :]
+        cos_table = cos_table[0, ..., cos_table.shape[-1] // 2 :]
 
         query_states = type(self).rotary_position_embedding(
-            query_states, sin_table, cos_table
+            query_states, sin_table, cos_table, interleaved=False
         )
         key_states = type(self).rotary_position_embedding(
-            key_states, sin_table, cos_table
+            key_states, sin_table, cos_table, interleaved=False
         )
 
         query_states = query_states.transpose(1, 2)
