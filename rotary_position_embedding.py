@@ -21,8 +21,8 @@ def torch_rotary_position_embedding(input, sin_table, cos_table, interleaved=Tru
 
         return torch.stack((input_0_rotated, input_1_rotated), dim=-1).view(input.shape)
     else:
-        input_0 = x[..., : x.shape[-1] // 2]
-        input_1 = x[..., x.shape[-1] // 2 :]
+        input_0 = input[..., : input.shape[-1] // 2]
+        input_1 = input[..., input.shape[-1] // 2 :]
         input_0_rotated = input_0 * cos_table - input_1 * sin_table
         input_1_rotated = input_0 * sin_table + input_1 * cos_table
 
