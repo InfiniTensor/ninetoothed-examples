@@ -178,7 +178,7 @@ if __name__ == "__main__":
                         "--device",
                         "cuda",
                         "--backend",
-                        "ninetoothed",
+                        backend,
                         "--num-warmup-iterations",
                         str(NUM_WARMUP_ITERATIONS),
                         "--num-profiling-iterations",
