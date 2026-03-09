@@ -10,6 +10,7 @@ import triton
 
 import ops.ninetoothed.torch
 import ops.triton.torch
+import ops.tilelang.torch
 import rotary_position_embedding
 
 PROMPTS = (
@@ -21,7 +22,7 @@ NUM_WARMUP_ITERATIONS = 1
 
 NUM_PROFILING_ITERATIONS = 3
 
-BACKENDS = ("ninetoothed", "triton", "torch")
+BACKENDS = ("ninetoothed", "triton", "torch", "tilelang")
 
 ALL_MAX_NEW_TOKENS = (128, 512, 2048)
 
@@ -29,6 +30,7 @@ ALL_MAX_NEW_TOKENS = (128, 512, 2048)
 def _run_task(op_name, dtype, device, *arg_shapes, **kwarg_shapes):
     ninetoothed_op = getattr(ops.ninetoothed.torch, op_name)
     triton_op = getattr(ops.triton.torch, op_name)
+    tilelang_op = getattr(ops.tilelang.torch, op_name, None)
 
     if op_name == "rotary_position_embedding":
         torch_op = rotary_position_embedding.torch_rotary_position_embedding
@@ -68,7 +70,7 @@ def _run_task(op_name, dtype, device, *arg_shapes, **kwarg_shapes):
     task_description = f"{op_name}({shape_string})"
 
     return task_description, _benchmark_ops(
-        (ninetoothed_op, triton_op, torch_op), *args, **kwargs
+        (ninetoothed_op, triton_op, torch_op, tilelang_op), *args, **kwargs
     )
 
 
@@ -150,14 +152,14 @@ if __name__ == "__main__":
         ("softmax", ((4096, 4096),), {}),
     )
 
-    data = {"Task": [], "NineToothed": [], "Triton": [], "PyTorch": []}
+    data = {"Task": [], "NineToothed": [], "Triton": [], "PyTorch": [], "TileLang": []}
 
     for name, args, kwargs in tasks:
         description, results = _run_task(name, dtype, device, *args, **kwargs)
 
         data["Task"].append(description)
 
-        for i, provider in enumerate(("NineToothed", "Triton", "PyTorch")):
+        for i, provider in enumerate(("NineToothed", "Triton", "PyTorch", "TileLang")):
             data[provider].append(results[i])
 
         pd.DataFrame(data).set_index("Task").to_csv("microbenchmark_data.csv")

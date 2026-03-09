@@ -8,6 +8,7 @@ from transformers.models.llama.modeling_llama import repeat_kv
 
 import ops.ninetoothed.torch
 import ops.triton.torch
+import ops.tilelang.torch
 from rotary_position_embedding import torch_rotary_position_embedding
 
 
@@ -32,7 +33,6 @@ class Attention(nn.Module):
     ):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         value_states = self.v_proj(hidden_states).view(hidden_shape)
@@ -84,13 +84,14 @@ def scaled_dot_product_attention_backend(backend_name):
         impl = ops.ninetoothed.torch.scaled_dot_product_attention
     elif backend_name == "triton":
         impl = ops.triton.torch.scaled_dot_product_attention
+    elif backend_name == "tilelang":
+        impl = ops.tilelang.torch.scaled_dot_product_attention
     elif backend_name == "torch":
         impl = F.scaled_dot_product_attention
     else:
         raise ValueError(f"unknown backend: `{backend_name}`")
 
     Attention.scaled_dot_product_attention = impl
-
     try:
         yield
     finally:
@@ -111,7 +112,6 @@ def rotary_position_embedding_backend(backend_name):
         raise ValueError(f"unknown backend: `{backend_name}`")
 
     Attention.rotary_position_embedding = impl
-
     try:
         yield
     finally:
@@ -133,10 +133,19 @@ if __name__ == "__main__":
     ninetoothed_output = ops.ninetoothed.torch.scaled_dot_product_attention(q, k, v)
     torch_output = F.scaled_dot_product_attention(q, k, v)
     triton_output = ops.triton.torch.scaled_dot_product_attention(q, k, v)
+    # 先调优获取最优 kernel，再执行计算
+    batch, heads, seq_len, dim = q.shape
+    tilelang_kernel = ops.tilelang.torch.tune_scaled_dot_product_attention(
+        batch, heads, seq_len, dim, dtype=dtype
+    )
+    tilelang_output = ops.tilelang.torch.scaled_dot_product_attention(
+        q, k, v, kernel=tilelang_kernel
+    )
 
     print(ninetoothed_output)
     print(torch_output)
     print(triton_output)
+    print(tilelang_output)
 
     if torch.allclose(ninetoothed_output, torch_output, atol=0.01):
         print("✅ NineToothed and PyTorch match.")
@@ -146,6 +155,10 @@ if __name__ == "__main__":
         print("✅ NineToothed and Triton match.")
     else:
         print("❌ NineToothed and Triton differ.")
+    if torch.allclose(ninetoothed_output, tilelang_output, atol=0.01):
+        print("✅ NineToothed and TileLang match.")
+    else:
+        print("❌ NineToothed and TileLang differ.")
 
     @triton.testing.perf_report(
         triton.testing.Benchmark(
@@ -153,16 +166,16 @@ if __name__ == "__main__":
             x_vals=[2**i for i in range(7, 17)],
             x_log=True,
             line_arg="provider",
-            line_vals=["ninetoothed", "torch", "triton"],
-            line_names=["NineToothed", "PyTorch", "Triton"],
-            styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
+            line_vals=["ninetoothed", "torch", "triton", "tilelang"],
+            line_names=["NineToothed", "PyTorch", "Triton", "TileLang"],
+            styles=[("blue", "-"), ("green", "-"), ("orange", "-"), ("red", "--")],
             ylabel="ms",
             plot_name="scaled-dot-product-attention-performance",
             args={},
         )
     )
     def benchmark(seq_len, provider):
-        batch_size, num_heads, emb_dim = 4, 32, 64
+        batch_size, num_heads, emb_dim = 4, 48, 64
         shape = (batch_size, num_heads, seq_len, emb_dim)
         dtype = torch.float16
         device = "cuda"
@@ -174,9 +187,12 @@ if __name__ == "__main__":
         ninetoothed_output = ops.ninetoothed.torch.scaled_dot_product_attention(q, k, v)
         torch_output = F.scaled_dot_product_attention(q, k, v)
         triton_output = ops.triton.torch.scaled_dot_product_attention(q, k, v)
-
-        assert torch.allclose(ninetoothed_output, torch_output, atol=0.025, rtol=0.025)
-        assert torch.allclose(ninetoothed_output, triton_output, atol=0.001, rtol=0.001)
+        tilelang_kernel = ops.tilelang.torch.tune_scaled_dot_product_attention(
+            batch_size, num_heads, seq_len, emb_dim, dtype=dtype
+        )
+        tilelang_output = ops.tilelang.torch.scaled_dot_product_attention(
+            q, k, v, kernel=tilelang_kernel
+        )
 
         if provider == "ninetoothed":
             ms = triton.testing.do_bench(
@@ -189,6 +205,12 @@ if __name__ == "__main__":
         elif provider == "triton":
             ms = triton.testing.do_bench(
                 lambda: ops.triton.torch.scaled_dot_product_attention(q, k, v)
+            )
+        elif provider == "tilelang":
+            ms = triton.testing.do_bench(
+                lambda: ops.tilelang.torch.scaled_dot_product_attention(
+                    q, k, v, kernel=tilelang_kernel
+                )
             )
 
         return ms

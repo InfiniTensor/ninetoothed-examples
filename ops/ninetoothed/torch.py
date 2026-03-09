@@ -19,7 +19,7 @@ import ops.ninetoothed.kernels.swiglu
 def add(input, other):
     output = torch.empty_like(input)
 
-    ops.ninetoothed.kernels.add.kernel(input, other, output, BLOCK_SIZE=1024)
+    ops.ninetoothed.kernels.add.kernel(input, other, output, BLOCK_SIZE_M=32, BLOCK_SIZE_N=32)
 
     return output
 

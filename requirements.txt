@@ -4,3 +4,4 @@ matplotlib
 pandas
 transformers
 radon
+tilelang>=0.1.8

@@ -18,7 +18,12 @@ import ops.triton.kernels.swiglu
 
 
 def add(input, other):
-    num_elements = input.numel()
+    height = input.shape[0]
+    width = input.shape[1]
+    num_elements = height * width
+
+    output = torch.empty_like(input)
+    num_elements = input.shape[0] * input.shape[1]
 
     output = torch.empty_like(input)
 
@@ -26,7 +31,7 @@ def add(input, other):
         return (triton.cdiv(num_elements, meta["BLOCK_SIZE"]),)
 
     ops.triton.kernels.add.kernel[grid](
-        input, other, output, num_elements, BLOCK_SIZE=1024
+        input, other, output, height, width, BLOCK_SIZE=1024
     )
 
     return output
