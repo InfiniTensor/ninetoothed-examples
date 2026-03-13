@@ -14,7 +14,9 @@ import ops.ninetoothed.kernels.scaled_dot_product_attention
 import ops.ninetoothed.kernels.silu
 import ops.ninetoothed.kernels.softmax
 import ops.ninetoothed.kernels.swiglu
-
+import ops.ninetoothed.kernels.relu
+import ops.ninetoothed.kernels.max_pool2d
+import ops.ninetoothed.kernels.avg_pool2d
 
 def add(input, other):
     output = torch.empty_like(input)
@@ -41,19 +43,52 @@ def bmm(lhs, rhs):
 
     return output
 
+def conv2d(input, weight, bias=None, stride=1, padding=0, dilation=1, groups=1):
+    if isinstance(stride, int):
+        stride = (stride, stride)
 
-def conv2d(input, filter):
+    # TODO: Support `padding != 0`.
+    assert padding == 0, "`padding != 0` is not supported yet."
+
+    if isinstance(padding, str):
+        if padding == "valid":
+            padding = 0
+
+    if isinstance(padding, int):
+        padding = (padding, padding)
+
+    if isinstance(dilation, int):
+        dilation = (dilation, dilation)
+
+    # TODO: Support `groups != 1`.
+    assert groups == 1, "`groups != 1` is not supported yet."
+
     n, _, h, w = input.shape
-    k, _, r, s = filter.shape
-    p = h - r + 1
-    q = w - s + 1
+    k, _, r, s = weight.shape
+    p = math.floor((h + 2 * padding[0] - dilation[0] * (r - 1) - 1) / stride[0] + 1)
+    q = math.floor((w + 2 * padding[1] - dilation[1] * (s - 1) - 1) / stride[1] + 1)
 
     output = torch.empty((n, k, p, q), dtype=input.dtype, device=input.device)
 
-    ops.ninetoothed.kernels.conv2d.kernel(input, filter, output)
+    if bias is None:
+        bias = torch.zeros((k,), dtype=output.dtype, device=output.device)
+
+    bias = bias[None, :, None, None].expand_as(output)
+
+    # kernel = _cached_make(ntops.kernels.conv2d.premake)
+
+    ops.ninetoothed.kernels.conv2d.kernels[(stride[0],dilation[0])](
+        input,
+        weight,
+        bias,
+        output,
+        # stride_h=stride[0],
+        # stride_w=stride[1],
+        # dilation_h=dilation[0],
+        # dilation_w=dilation[1],
+    )
 
     return output
-
 
 def fused_rms_norm(x, w, eps=None):
     if eps is None:
@@ -125,6 +160,14 @@ def silu(input):
 
     return output_flat.view_as(input)
 
+def relu(input):
+    input_flat = input.flatten()
+    output_flat = torch.empty_like(input_flat)
+
+    ops.ninetoothed.kernels.relu.kernel(input_flat, output_flat, BLOCK_SIZE=1024)
+
+    return output_flat.view_as(input)
+
 
 def softmax(input):
     output = torch.empty_like(input)
@@ -143,3 +186,27 @@ def swiglu(a, b):
     ops.ninetoothed.kernels.swiglu.kernel(a_flat, b_flat, c, BLOCK_SIZE=1024)
 
     return c.view_as(a)
+
+def max_pool2d(input, window_shape):
+    n, c, h, w = input.shape
+    r, s = window_shape
+    p = math.ceil((h - r) / r + 1)
+    q = math.ceil((w - s) / s + 1)
+
+    output = torch.empty(n, c, p, q, dtype=input.dtype, device=input.device)
+
+    ops.ninetoothed.kernels.max_pool2d.kernel(input, output, WINDOW_HEIGHT=r, WINDOW_WIDTH=s)
+    
+    return output
+
+def avg_pool2d(input, window_shape):
+    n, c, h, w = input.shape
+    r, s = window_shape
+    p = math.ceil((h - r) / r + 1)
+    q = math.ceil((w - s) / s + 1)
+
+    output = torch.empty(n, c, p, q, dtype=input.dtype, device=input.device)
+
+    ops.ninetoothed.kernels.avg_pool2d.kernel(input, output, WINDOW_HEIGHT=r, WINDOW_WIDTH=s)
+
+    return output

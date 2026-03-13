@@ -6,74 +6,50 @@ import triton
 
 import ops.ninetoothed.torch
 import ops.triton.torch
-
 import ntops.torch
 
-class MaxPool2d(nn.Module):
-    max_pool2d = None
+class AvgPool2d(nn.Module):
+    avg_pool2d = None
 
     def __init__(self, other):
         super().__init__()
 
         self.__dict__ = other.__dict__
 
-    # def forward(self, input):
-    #     print("using ninetoothed max_pool2d kernel")
-    #     return type(self).max_pool2d(input)
     def forward(self, input):
+        def _pair(x):
+            return (x, x) if isinstance(x, int) else x
         
-        # 处理 kernel_size（确保是 tuple）
-        kernel_size = self.kernel_size
-        if isinstance(kernel_size, int):
-            kernel_size = (kernel_size, kernel_size)
-        
-        # 处理 stride（None 表示默认等于 kernel_size）
-        stride = self.stride
-        if stride is None:
-            stride = kernel_size
-        elif isinstance(stride, int):
-            stride = (stride, stride)
-        
-        # 处理 padding
-        padding = self.padding
-        if isinstance(padding, int):
-            padding = (padding, padding)
-        
-        # 处理 dilation
-        dilation = self.dilation
-        if isinstance(dilation, int):
-            dilation = (dilation, dilation)
-        
-        return type(self).max_pool2d(
+        return type(self).avg_pool2d(
             input,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            dilation=dilation,
+            kernel_size=_pair(self.kernel_size),
+            stride=_pair(self.stride) if self.stride else _pair(self.kernel_size),
+            padding=_pair(self.padding),
             ceil_mode=self.ceil_mode,
-            return_indices=self.return_indices,
+            count_include_pad=self.count_include_pad,
+            divisor_override=self.divisor_override,
         )
 
 
 @contextmanager
-def max_pool2d_backend(backend_name):
-    _prev_impl = MaxPool2d.max_pool2d
+def avg_pool2d_backend(backend_name):
+    _prev_impl = AvgPool2d.avg_pool2d
 
     if backend_name == "ninetoothed":
-        impl = ntops.torch.max_pool2d
+        impl = ntops.torch.avg_pool2d
     elif backend_name == "triton":
-        impl = ops.triton.torch.max_pool2d
+        impl = ops.triton.torch.avg_pool2d
     elif backend_name == "torch":
-        impl = F.max_pool2d
+        impl = F.avg_pool2d
     else:
         raise ValueError(f"unknown backend: `{backend_name}`")
 
-    MaxPool2d.max_pool2d = impl
+    AvgPool2d.avg_pool2d = impl
 
     try:
         yield
     finally:
-        MaxPool2d.max_pool2d = _prev_impl
+        AvgPool2d.avg_pool2d = _prev_impl
 
 if __name__ == "__main__":
     torch.manual_seed(0)
@@ -83,8 +59,8 @@ if __name__ == "__main__":
 
     input = torch.randn(input_shape, dtype=torch.float16, device="cuda")
 
-    ninetoothed_output = ops.ninetoothed.torch.max_pool2d(input, window_shape)
-    torch_output = F.max_pool2d(input, window_shape, ceil_mode=True)
+    ninetoothed_output = ops.ninetoothed.torch.avg_pool2d(input, window_shape)
+    torch_output = F.avg_pool2d(input, window_shape, ceil_mode=True)
 
     print(ninetoothed_output)
     print(torch_output)
@@ -103,7 +79,7 @@ if __name__ == "__main__":
             line_names=["NineToothed", "PyTorch"],
             styles=[("blue", "-"), ("green", "-")],
             ylabel="ms",
-            plot_name="max-pool2d-performance",
+            plot_name="avg-pool2d-performance",
             args={},
         )
     )
@@ -116,9 +92,9 @@ if __name__ == "__main__":
         window_shape = (r, s)
 
         if provider == "ninetoothed":
-            ms = triton.testing.do_bench(lambda: ops.ninetoothed.torch.max_pool2d(input, window_shape))
+            ms = triton.testing.do_bench(lambda: ops.ninetoothed.torch.avg_pool2d(input, window_shape))
         elif provider == "torch":
-            ms = triton.testing.do_bench(lambda: F.max_pool2d(input, window_shape))
+            ms = triton.testing.do_bench(lambda: F.avg_pool2d(input, window_shape))
 
         return ms
 

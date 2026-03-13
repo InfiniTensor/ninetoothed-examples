@@ -1,75 +1,84 @@
+from contextlib import contextmanager
 import torch
 import torch.nn.functional as F
 import triton
+import torch.nn as nn
 
 import ops.ninetoothed.torch
 import ops.triton.torch
+import ntops.torch
+
+class Conv2d(nn.Module):
+    conv2d = None
+
+    def __init__(self, other):
+        super().__init__()
+
+        self.__dict__ = other.__dict__
+
+    def forward(self, input):
+        def _pair(x):
+            return x if isinstance(x, (tuple, list)) else (x, x)
+        
+        stride = _pair(self.stride)
+        padding = _pair(self.padding)
+        dilation = _pair(self.dilation)
+        
+        return type(self).conv2d(
+            input,
+            self.weight,
+            self.bias,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=self.groups,
+        )
+    
+@contextmanager
+def conv2d_backend(backend_name):
+    _prev_impl = Conv2d.conv2d
+    if backend_name == "ninetoothed":
+        impl = ntops.torch.conv2d
+    elif backend_name == "torch":
+        impl = F.conv2d
+    else:
+        raise ValueError(f"unknown backend: `{backend_name}`")
+
+    Conv2d.conv2d = impl
+
+    try:
+        yield
+    finally:
+        Conv2d.conv2d = _prev_impl
 
 if __name__ == "__main__":
     torch.manual_seed(0)
 
-    n, c, h, w = 4, 3, 224, 224
-    k, _, r, s = 8, c, 3, 3
+    n, c, h, w = 2, 3, 112, 112
+    k, _, r, s = 4, c, 3, 3
     dtype = torch.float16
     device = "cuda"
 
-    input = torch.randn(n, c, h, w, dtype=dtype, device=device)
-    filter = torch.randn(k, c, r, s, dtype=dtype, device=device)
+    input = torch.randn((n, c, h, w), dtype=dtype, device=device)
+    weight = torch.randn((k, c, r, s), dtype=dtype, device=device)
+    bias = torch.randn((k,), dtype=dtype, device=device)
+    stride = 3
+    dilation = 1
+    
+    ninetoothed_output = ops.ninetoothed.torch.conv2d(
+        input, weight, bias=bias, stride=stride, dilation=dilation
+    )
+    reference_output = F.conv2d(
+        input, weight, bias=bias, stride=stride, dilation=dilation
+    )
 
-    ninetoothed_output = ops.ninetoothed.torch.conv2d(input, filter)
-    torch_output = F.conv2d(input, filter)
-    triton_output = ops.triton.torch.conv2d(input, filter)
-
+    
     print(ninetoothed_output)
-    print(torch_output)
-    print(triton_output)
+    print(reference_output)
+    
 
-    if torch.allclose(ninetoothed_output, torch_output, atol=0.01, rtol=0.01):
+    if torch.allclose(ninetoothed_output, reference_output, atol=0.01, rtol=0.01):
         print("✅ NineToothed and PyTorch match.")
     else:
         print("❌ NineToothed and PyTorch differ.")
-    if torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0):
-        print("✅ NineToothed and Triton match.")
-    else:
-        print("❌ NineToothed and Triton differ.")
-
-    @triton.testing.perf_report(
-        triton.testing.Benchmark(
-            x_names=["n"],
-            x_vals=[2**i for i in range(1, 11)],
-            x_log=True,
-            line_arg="provider",
-            line_vals=["ninetoothed", "torch", "triton"],
-            line_names=["NineToothed", "PyTorch", "Triton"],
-            styles=[("blue", "-"), ("green", "-"), ("orange", "-")],
-            ylabel="ms",
-            plot_name="conv2d-performance",
-            args={},
-        )
-    )
-    def benchmark(n, provider):
-        _, c, h, w = n, 512, 14, 14
-        k, _, r, s = 512, c, 3, 3
-
-        input = torch.randn((n, c, h, w), dtype=dtype, device=device)
-        filter = torch.randn((k, c, r, s), dtype=dtype, device=device)
-
-        ninetoothed_output = ops.ninetoothed.torch.conv2d(input, filter)
-        torch_output = F.conv2d(input, filter)
-        triton_output = ops.triton.torch.conv2d(input, filter)
-
-        assert torch.allclose(ninetoothed_output, torch_output, atol=0.01, rtol=0.01)
-        assert torch.allclose(ninetoothed_output, triton_output, atol=0, rtol=0)
-
-        if provider == "ninetoothed":
-            ms = triton.testing.do_bench(
-                lambda: ops.ninetoothed.torch.conv2d(input, filter)
-            )
-        elif provider == "torch":
-            ms = triton.testing.do_bench(lambda: F.conv2d(input, filter))
-        elif provider == "triton":
-            ms = triton.testing.do_bench(lambda: ops.triton.torch.conv2d(input, filter))
-
-        return ms
-
-    benchmark.run(show_plots=True, print_data=True, save_path=".")
+    

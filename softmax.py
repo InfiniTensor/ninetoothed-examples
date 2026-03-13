@@ -1,8 +1,43 @@
+from contextlib import contextmanager
+
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import triton
 
 import ops.ninetoothed.torch
 import ops.triton.torch
+
+class Softmax(nn.Module):
+    silu = None
+
+    def __init__(self, other):
+        super().__init__()
+
+        self.__dict__ = other.__dict__
+
+    def forward(self, input):
+        return type(self).softmax(input)
+
+@contextmanager
+def softmax_backend(backend_name):
+    _prev_impl = Softmax.softmax
+
+    if backend_name == "ninetoothed":
+        impl = ops.ninetoothed.torch.softmax
+    elif backend_name == "triton":
+        impl = ops.triton.torch.softmax
+    elif backend_name == "torch":
+        impl = F.softmax
+    else:
+        raise ValueError(f"unknown backend: `{backend_name}`")
+
+    Softmax.softmax = impl
+
+    try:
+        yield
+    finally:
+        Softmax.softmax = _prev_impl
 
 if __name__ == "__main__":
     torch.manual_seed(0)
