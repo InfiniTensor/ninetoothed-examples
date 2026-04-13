@@ -7,6 +7,7 @@ import ops.ninetoothed.kernels.addmm
 import ops.ninetoothed.kernels.bmm
 import ops.ninetoothed.kernels.conv2d
 import ops.ninetoothed.kernels.fused_rms_norm
+import ops.ninetoothed.kernels.max_pool2d
 import ops.ninetoothed.kernels.mm
 import ops.ninetoothed.kernels.rms_norm
 import ops.ninetoothed.kernels.rotary_position_embedding
@@ -68,6 +69,21 @@ def fused_rms_norm(x, w, eps=None):
     )
 
     return y_2d.view(x.shape)
+
+
+def max_pool2d(input, window_shape):
+    n, c, h, w = input.shape
+    r, s = window_shape
+    p = math.ceil((h - r) / r + 1)
+    q = math.ceil((w - s) / s + 1)
+
+    output = torch.empty(n, c, p, q, dtype=input.dtype, device=input.device)
+
+    ops.ninetoothed.kernels.max_pool2d.kernel(
+        input, output, WINDOW_HEIGHT=r, WINDOW_WIDTH=s
+    )
+
+    return output
 
 
 def mm(input, other):
