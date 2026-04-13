@@ -10,7 +10,7 @@ import triton
 
 import ops.ninetoothed.torch
 import ops.triton.torch
-import rotary_position_embedding
+from modules import torch_rotary_position_embedding
 
 PROMPTS = (
     "The emergence of deep learning domain-specific languages (DSLs) has substantially reduced the obstacles in developing high-performance, cross-platform compute kernels, but current DSLs",
@@ -31,7 +31,7 @@ def _run_task(op_name, dtype, device, *arg_shapes, **kwarg_shapes):
     triton_op = getattr(ops.triton.torch, op_name)
 
     if op_name == "rotary_position_embedding":
-        torch_op = rotary_position_embedding.torch_rotary_position_embedding
+        torch_op = torch_rotary_position_embedding
     else:
         torch_op = (
             getattr(torch, op_name)
