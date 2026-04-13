@@ -5,15 +5,18 @@ import time
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from fused_rms_norm import RMSNorm, rms_norm_backend
-from linear import Linear, bmm_backend
-from scaled_dot_product_attention import (
+from modules import (
     Attention,
+    Linear,
+    RMSNorm,
+    SiLU,
+    bmm_backend,
+    replace_module,
+    rms_norm_backend,
     rotary_position_embedding_backend,
     scaled_dot_product_attention_backend,
+    silu_backend,
 )
-from silu import SiLU, silu_backend
-from utils import replace_module
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
