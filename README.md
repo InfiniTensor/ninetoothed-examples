@@ -4,10 +4,24 @@ This repository contains examples of [NineToothed](https://github.com/InfiniTens
 
 ## Usage
 
-After cloning this repository, you can run any of the examples using Python. For instance, to run the matrix multiplication example, execute the following command:
+After cloning this repository, install the dependencies and run the tests using `pytest`.
+
+### Correctness Tests
 
 ```bash
-python mm.py
+pytest
+```
+
+### Benchmark Tests
+
+```bash
+pytest -m benchmark
+```
+
+To run a single operator benchmark:
+
+```bash
+pytest -m benchmark -k TestMM
 ```
 
 ### Autotuning Behavior
