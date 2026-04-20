@@ -1,12 +1,13 @@
-import ninetoothed
+import functools
+
 import ninetoothed.language as ntl
-from ninetoothed import Symbol, Tensor
+from ninetoothed import Tensor
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
+from ops.ninetoothed.kernels._common import DTYPES, build
 
 
-def arrangement(a, b, c, BLOCK_SIZE=BLOCK_SIZE):
-    return a.tile((BLOCK_SIZE,)), b.tile((BLOCK_SIZE,)), c.tile((BLOCK_SIZE,))
+def arrangement(a, b, c, block_size):
+    return a.tile((block_size,)), b.tile((block_size,)), c.tile((block_size,))
 
 
 def application(a, b, c):
@@ -15,6 +16,17 @@ def application(a, b, c):
     c = a * gate  # noqa: F841
 
 
-tensors = (Tensor(1), Tensor(1), Tensor(1))
+def premake(dtype, block_size):
+    arrangement_ = functools.partial(arrangement, block_size=block_size)
+    tensors = tuple(Tensor(1, dtype=dtype) for _ in range(3))
 
-kernel = ninetoothed.make(arrangement, application, tensors)
+    return arrangement_, application, tensors
+
+
+configs = tuple(
+    ((), {"dtype": dtype, "block_size": block_size}, {})
+    for dtype in DTYPES
+    for block_size in (512, 1024, 2048)
+)
+
+kernel = build(premake, configs, meta_parameters=("block_size",), kernel_name="swiglu")

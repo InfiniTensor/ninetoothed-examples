@@ -1,5 +1,6 @@
 import math
 
+import ninetoothed
 import torch
 
 import ops.ninetoothed.kernels.add
@@ -16,11 +17,19 @@ import ops.ninetoothed.kernels.silu
 import ops.ninetoothed.kernels.softmax
 import ops.ninetoothed.kernels.swiglu
 
+_DTYPE_MAPPING = {
+    torch.float16: ninetoothed.float16,
+    torch.bfloat16: ninetoothed.bfloat16,
+    torch.float32: ninetoothed.float32,
+}
+
 
 def add(input, other):
     output = torch.empty_like(input)
 
-    ops.ninetoothed.kernels.add.kernel(input, other, output, BLOCK_SIZE=1024)
+    ops.ninetoothed.kernels.add.kernel(
+        input, other, output, _DTYPE_MAPPING[input.dtype]
+    )
 
     return output
 
@@ -87,10 +96,13 @@ def max_pool2d(input, window_shape):
 
 
 def mm(input, other):
-    output_shape = (input.shape[0], other.shape[1])
-    output = torch.empty(output_shape, dtype=input.dtype, device=input.device)
+    m, k = input.shape
+    _, n = other.shape
+    output = torch.empty((m, n), dtype=input.dtype, device=input.device)
 
-    ops.ninetoothed.kernels.mm.kernel(input, other, output)
+    ops.ninetoothed.kernels.mm.kernel(
+        input, other, output, m, n, k, _DTYPE_MAPPING[input.dtype]
+    )
 
     return output
 
@@ -137,7 +149,9 @@ def silu(input):
     input_flat = input.flatten()
     output_flat = torch.empty_like(input_flat)
 
-    ops.ninetoothed.kernels.silu.kernel(input_flat, output_flat, BLOCK_SIZE=1024)
+    ops.ninetoothed.kernels.silu.kernel(
+        input_flat, output_flat, _DTYPE_MAPPING[input.dtype]
+    )
 
     return output_flat.view_as(input)
 
@@ -156,6 +170,6 @@ def swiglu(a, b):
 
     c = torch.empty_like(a_flat)
 
-    ops.ninetoothed.kernels.swiglu.kernel(a_flat, b_flat, c, BLOCK_SIZE=1024)
+    ops.ninetoothed.kernels.swiglu.kernel(a_flat, b_flat, c, _DTYPE_MAPPING[a.dtype])
 
     return c.view_as(a)
