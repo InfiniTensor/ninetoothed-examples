@@ -1,13 +1,15 @@
+import functools
+
 import ninetoothed
 import ninetoothed.language as ntl
-from ninetoothed import Symbol, Tensor
+from ninetoothed import Tensor
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
+from ops.ninetoothed.kernels._common import DTYPES, build
 
 
-def arrangement(x, w, eps, y, BLOCK_SIZE=BLOCK_SIZE):
+def arrangement(x, w, eps, y, block_size):
     def arrange(tensor):
-        return tensor.tile((1, BLOCK_SIZE))
+        return tensor.tile((1, block_size))
 
     return arrange(x), arrange(w), eps, arrange(y)
 
@@ -17,6 +19,24 @@ def application(x, w, eps, y):
     y = x_fp32 * ntl.rsqrt(ntl.sum(x_fp32 * x_fp32) / x.shape[-1] + eps) * w  # noqa: F841
 
 
-tensors = (Tensor(2), Tensor(2), Tensor(0), Tensor(2))
+def premake(dtype, n, block_size):
+    arrangement_ = functools.partial(arrangement, block_size=block_size)
+    tensors = (
+        Tensor(2, dtype=dtype),
+        Tensor(2, dtype=dtype),
+        Tensor(0, dtype=ninetoothed.float32),
+        Tensor(2, dtype=dtype),
+    )
 
-kernel = ninetoothed.make(arrangement, application, tensors)
+    return arrangement_, application, tensors
+
+
+configs = tuple(
+    ((), {"dtype": dtype, "n": n, "block_size": n}, {})
+    for dtype in DTYPES
+    for n in (32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384)
+)
+
+kernel = build(
+    premake, configs, meta_parameters=("block_size",), kernel_name="fused_rms_norm"
+)

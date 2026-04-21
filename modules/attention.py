@@ -60,11 +60,15 @@ class Attention(nn.Module):
         self,
         hidden_states,
         position_embeddings,
-        attention_mask,
-        past_key_value=None,
+        attention_mask=None,
+        past_key_values=None,
         cache_position=None,
+        past_key_value=None,
         **kwargs,
     ):
+        if past_key_value is None:
+            past_key_value = past_key_values
+
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -88,30 +92,24 @@ class Attention(nn.Module):
         value_states = value_states.transpose(1, 2)
 
         if past_key_value is not None:
-            cache_kwargs = {
-                "sin": sin_table,
-                "cos": cos_table,
-                "cache_position": cache_position,
-            }
             key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
+                key_states, value_states, self.layer_idx
             )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
-            attn_output = F.scaled_dot_product_attention(
-                query_states,
-                key_states,
-                value_states,
-                attn_mask=attention_mask,
-                scale=self.scaling,
-            )
-        else:
-            attn_output = type(self).scaled_dot_product_attention(
-                query_states, key_states, value_states, scale=self.scaling
-            )
+        # TODO: NineToothed SDPA kernel lacks causal masking support, which is
+        # required by autoregressive inference. Fall back to torch so end-to-end
+        # generation produces coherent output.
+        attn_output = F.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            is_causal=attention_mask is None and query_states.shape[-2] > 1,
+            scale=self.scaling,
+        )
         attn_output = attn_output.transpose(1, 2)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
