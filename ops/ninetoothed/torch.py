@@ -159,7 +159,12 @@ def silu(input):
 def softmax(input):
     output = torch.empty_like(input)
 
-    ops.ninetoothed.kernels.softmax.kernel(input, output, BLOCK_SIZE=input.shape[-1])
+    n = input.shape[-1]
+    block_size = 1 << (n - 1).bit_length()
+
+    ops.ninetoothed.kernels.softmax.kernel(
+        input, output, _DTYPE_MAPPING[input.dtype], block_size
+    )
 
     return output
 

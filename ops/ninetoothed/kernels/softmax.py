@@ -1,12 +1,13 @@
-import ninetoothed
+import functools
+
 import ninetoothed.language as ntl
-from ninetoothed import Symbol, Tensor
+from ninetoothed import Tensor
 
-BLOCK_SIZE = Symbol("BLOCK_SIZE", constexpr=True)
+from ops.ninetoothed.kernels._common import DTYPES, build
 
 
-def arrangement(input, output, BLOCK_SIZE=BLOCK_SIZE):
-    return input.tile((1, BLOCK_SIZE)), output.tile((1, BLOCK_SIZE))
+def arrangement(input, output, block_size):
+    return input.tile((1, block_size)), output.tile((1, block_size))
 
 
 def application(input, output):
@@ -19,6 +20,20 @@ def application(input, output):
     output = numerator / denominator  # noqa: F841
 
 
-tensors = (Tensor(2, other=float("-inf")), Tensor(2))
+def premake(dtype, n, block_size):
+    arrangement_ = functools.partial(arrangement, block_size=block_size)
+    tensors = (
+        Tensor(2, dtype=dtype, other=float("-inf")),
+        Tensor(2, dtype=dtype),
+    )
 
-kernel = ninetoothed.make(arrangement, application, tensors)
+    return arrangement_, application, tensors
+
+
+configs = tuple(
+    ((), {"dtype": dtype, "n": n, "block_size": n}, {})
+    for dtype in DTYPES
+    for n in (32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384)
+)
+
+kernel = build(premake, configs, meta_parameters=("block_size",), kernel_name="softmax")

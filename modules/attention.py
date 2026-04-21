@@ -100,9 +100,18 @@ class Attention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_output = type(self).scaled_dot_product_attention(
-            query_states, key_states, value_states, scale=self.scaling
-        )
+        if attention_mask is not None:
+            attn_output = F.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=attention_mask,
+                scale=self.scaling,
+            )
+        else:
+            attn_output = type(self).scaled_dot_product_attention(
+                query_states, key_states, value_states, scale=self.scaling
+            )
         attn_output = attn_output.transpose(1, 2)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
