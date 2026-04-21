@@ -67,7 +67,7 @@ def conv2d(input, filter):
 
 def fused_rms_norm(x, w, eps=None):
     if eps is None:
-        eps = torch.finfo(x.dtype).eps()
+        eps = torch.finfo(x.dtype).eps
 
     x_2d = x.view(-1, x.shape[-1])
     w_2d = w.expand_as(x_2d)
