@@ -24,7 +24,7 @@ def premake(dtype, n, block_size):
     tensors = (
         Tensor(2, dtype=dtype),
         Tensor(2, dtype=dtype),
-        Tensor(0, dtype=ninetoothed.float32),
+        Tensor(0, dtype=ninetoothed.float64),
         Tensor(2, dtype=dtype),
     )
 

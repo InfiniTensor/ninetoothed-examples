@@ -72,13 +72,12 @@ def fused_rms_norm(x, w, eps=None):
     x_2d = x.view(-1, x.shape[-1])
     w_2d = w.expand_as(x_2d)
     y_2d = torch.empty_like(x_2d)
-    eps_tensor = torch.tensor(eps, dtype=torch.float32)
 
     n = x.shape[-1]
     block_size = 1 << (n - 1).bit_length()
 
     ops.ninetoothed.kernels.fused_rms_norm.kernel(
-        x_2d, w_2d, eps_tensor, y_2d, _DTYPE_MAPPING[x.dtype], block_size
+        x_2d, w_2d, float(eps), y_2d, _DTYPE_MAPPING[x.dtype], block_size
     )
 
     return y_2d.view(x.shape)
@@ -116,13 +115,12 @@ def rms_norm(input, eps=None):
         eps = torch.finfo(input.dtype).eps
 
     output = torch.empty_like(input)
-    eps_tensor = torch.tensor(eps, dtype=torch.float32)
 
     n = input.shape[-1]
     block_size = 1 << (n - 1).bit_length()
 
     ops.ninetoothed.kernels.rms_norm.kernel(
-        input, eps_tensor, output, _DTYPE_MAPPING[input.dtype], block_size
+        input, float(eps), output, _DTYPE_MAPPING[input.dtype], block_size
     )
 
     return output

@@ -22,7 +22,7 @@ def premake(dtype, n, block_size):
     arrangement_ = functools.partial(arrangement, block_size=block_size)
     tensors = (
         Tensor(2, dtype=dtype),
-        Tensor(0, dtype=ninetoothed.float32),
+        Tensor(0, dtype=ninetoothed.float64),
         Tensor(2, dtype=dtype),
     )
 
