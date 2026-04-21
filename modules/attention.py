@@ -61,8 +61,8 @@ class Attention(nn.Module):
         hidden_states,
         position_embeddings,
         attention_mask,
-        past_key_value,
-        cache_position,
+        past_key_value=None,
+        cache_position=None,
         **kwargs,
     ):
         input_shape = hidden_states.shape[:-1]
