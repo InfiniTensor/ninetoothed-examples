@@ -3,10 +3,11 @@ import functools
 import ninetoothed
 from ninetoothed import Tensor
 
+from ops.ninetoothed.kernels._common import DTYPES, build
 
-def arrangement(input, sin_table, cos_table, interleaved=True):
-    emb_dim = input.shape[-1]
-    tile_shape = (1, 1, 1, emb_dim // 2)
+
+def arrangement(input, sin_table, cos_table, head_dim, interleaved):
+    tile_shape = (1, 1, 1, head_dim // 2)
 
     if interleaved:
         strides = (-1, -1, -1, 1)
@@ -40,17 +41,55 @@ def application(input, sin_table, cos_table):
     input[1] = input_0 * sin_table_loaded + input_1 * cos_table_loaded
 
 
-inputs = tuple(Tensor(4, shape_options={"constexpr": True}) for _ in range(3))
+def premake(head_dim, dtype, interleaved):
+    arrangement_ = functools.partial(
+        arrangement, head_dim=head_dim, interleaved=interleaved
+    )
+    input_tensor = Tensor(shape=(None, None, None, head_dim), dtype=dtype)
+    sin_cos_tensors = tuple(
+        Tensor(shape=(None, None, None, head_dim // 2), dtype=dtype) for _ in range(2)
+    )
+    tensors = (input_tensor,) + sin_cos_tensors
 
-interleaved_kernel = ninetoothed.make(
-    functools.partial(arrangement, interleaved=True), application, inputs
+    return arrangement_, application, tensors
+
+
+configs = tuple(
+    (
+        (),
+        {"head_dim": head_dim, "dtype": dtype, "interleaved": interleaved},
+        {},
+    )
+    for head_dim in (64, 128)
+    for dtype in (*DTYPES, ninetoothed.float32)
+    for interleaved in (False, True)
 )
-non_interleaved_kernel = ninetoothed.make(
-    functools.partial(arrangement, interleaved=False), application, inputs
-)
+
+_kernel = build(premake, configs, kernel_name="rotary_position_embedding")
+
+
+_TORCH_TO_NT_DTYPE = {}
 
 
 def kernel(input, sin_table, cos_table, interleaved=True):
-    return (interleaved_kernel if interleaved else non_interleaved_kernel)(
-        input, sin_table, cos_table
+    import torch
+
+    if not _TORCH_TO_NT_DTYPE:
+        _TORCH_TO_NT_DTYPE.update(
+            {
+                torch.float16: ninetoothed.float16,
+                torch.bfloat16: ninetoothed.bfloat16,
+                torch.float32: ninetoothed.float32,
+            }
+        )
+
+    head_dim = input.shape[-1]
+
+    return _kernel(
+        input,
+        sin_table,
+        cos_table,
+        head_dim,
+        _TORCH_TO_NT_DTYPE[input.dtype],
+        bool(interleaved),
     )
