@@ -47,7 +47,12 @@ def bmm(lhs, rhs):
     output_shape = (lhs.shape[0], lhs.shape[-2], rhs.shape[-1])
     output = torch.empty(output_shape, dtype=lhs.dtype, device=lhs.device)
 
-    ops.ninetoothed.kernels.bmm.kernel(lhs, rhs, output)
+    k = lhs.shape[-1]
+    n = rhs.shape[-1]
+
+    ops.ninetoothed.kernels.bmm.kernel(
+        lhs, rhs, output, k, n, _DTYPE_MAPPING[lhs.dtype]
+    )
 
     return output
 
