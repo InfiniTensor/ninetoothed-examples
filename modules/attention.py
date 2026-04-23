@@ -99,16 +99,8 @@ class Attention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # TODO: NineToothed SDPA kernel lacks causal masking support, which is
-        # required by autoregressive inference. Fall back to torch so end-to-end
-        # generation produces coherent output.
-        attn_output = F.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            is_causal=attention_mask is None and query_states.shape[-2] > 1,
-            scale=self.scaling,
+        attn_output = type(self).scaled_dot_product_attention(
+            query_states, key_states, value_states, scale=self.scaling
         )
         attn_output = attn_output.transpose(1, 2)
 

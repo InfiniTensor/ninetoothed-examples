@@ -96,10 +96,13 @@ def kernel(
     l_i = tl.full((BLOCK_SIZE_M,), 1, dtype=tl.float32)
     m_i = tl.full((BLOCK_SIZE_M,), float("-inf"), dtype=tl.float32)
 
+    q_offsets = seq_len_k_v - seq_len_q + offs_m_start + tl.arange(0, BLOCK_SIZE_M)
+
     for i in range(0, tl.cdiv(seq_len_k_v, BLOCK_SIZE_N)):
         k = tl.load(k_block_ptr, boundary_check=(0, 1))
 
-        mask = i * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N) < seq_len_k_v
+        k_offsets = i * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
+        mask = q_offsets[:, None] >= k_offsets[None, :]
         qk = tl.where(mask, tl.dot(q, k), float("-inf"))
 
         m_ij = tl.maximum(m_i, tl.max(qk, 1))

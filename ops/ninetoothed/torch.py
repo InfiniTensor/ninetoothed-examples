@@ -149,9 +149,13 @@ def scaled_dot_product_attention(q, k, v, scale=None):
     if scale is None:
         scale = 1 / math.sqrt(q.shape[-1])
 
+    q_start = k.shape[-2] - q.shape[-2]
+
     o = torch.empty_like(q)
 
-    ops.ninetoothed.kernels.scaled_dot_product_attention.kernel(q, k, v, scale, o)
+    ops.ninetoothed.kernels.scaled_dot_product_attention.kernel(
+        q, k, v, scale, q_start, o
+    )
 
     return o
 
