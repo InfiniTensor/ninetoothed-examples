@@ -81,7 +81,9 @@ if __name__ == "__main__":
     assert num_warmup_iterations >= 0
 
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
-    model = AutoModelForCausalLM.from_pretrained(model_name_or_path).to(device)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name_or_path, torch_dtype="auto"
+    ).to(device)
 
     tokenizer.pad_token = tokenizer.eos_token
     model.generation_config.pad_token_id = tokenizer.pad_token_id
