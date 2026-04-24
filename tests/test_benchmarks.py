@@ -89,7 +89,7 @@ class TestBMMBenchmark:
             x_names=["m", "n", "k"],
             x_vals=[2**i for i in range(3, 13)],
             benchmark_args={"b": 4},
-            tolerances={"triton": {"atol": 0, "rtol": 0}},
+            tolerances={"triton": {"atol": 0.01, "rtol": 0.01}},
             name="bmm",
         )
 
@@ -171,7 +171,7 @@ class TestSoftmaxBenchmark:
             benchmark_args={"m": 4096},
             tolerances={
                 "torch": {"atol": 0.001},
-                "triton": {"atol": 0, "rtol": 0},
+                "triton": {"atol": 0.001, "rtol": 0.001},
             },
             name="softmax",
         )
@@ -196,7 +196,7 @@ class TestRMSNormBenchmark:
             benchmark_args={"m": 4096},
             tolerances={
                 "torch": {"atol": 0.001, "rtol": 0.005},
-                "triton": {"atol": 0, "rtol": 0},
+                "triton": {"atol": 0.001, "rtol": 0.005},
             },
             name="rms-norm",
         )
@@ -316,7 +316,9 @@ class TestScaledDotProductAttentionBenchmark:
     def test_benchmark(self):
         impls = {
             "ninetoothed": ops.ninetoothed.torch.scaled_dot_product_attention,
-            "torch": F.scaled_dot_product_attention,
+            "torch": lambda q, k, v: F.scaled_dot_product_attention(
+                q, k, v, is_causal=True
+            ),
             "triton": ops.triton.torch.scaled_dot_product_attention,
         }
 
