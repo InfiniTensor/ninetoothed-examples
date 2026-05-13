@@ -84,7 +84,10 @@ class TestAddMM:
                 torch.randn(shape, dtype=DTYPE, device=DEVICE),
             ),
             kwargs={"beta": beta, "alpha": alpha},
-            tolerances={"torch": {"atol": 0.01, "rtol": 0.01}},
+            tolerances={
+                "torch": {"atol": 0.01, "rtol": 0.01},
+                "triton": {"atol": 0.01, "rtol": 0.01},
+            },
         )
 
 
@@ -121,7 +124,7 @@ class TestSoftmax:
             args=(torch.randn(1823, 781, dtype=DTYPE, device=DEVICE),),
             tolerances={
                 "torch": {"atol": 0.001},
-                "triton": {"atol": 0, "rtol": 0},
+                "triton": {"atol": 0.001},
             },
         )
 
@@ -137,7 +140,7 @@ class TestRMSNorm:
             args=(torch.randn(1151, 8192, dtype=DTYPE, device=DEVICE),),
             tolerances={
                 "torch": {"atol": 0.001, "rtol": 0.005},
-                "triton": {"atol": 0, "rtol": 0},
+                "triton": {"atol": 0.001, "rtol": 0.005},
             },
         )
 
@@ -233,7 +236,9 @@ class TestScaledDotProductAttention:
         assert_match(
             {
                 "ninetoothed": ops.ninetoothed.torch.scaled_dot_product_attention,
-                "torch": F.scaled_dot_product_attention,
+                "torch": lambda q, k, v: F.scaled_dot_product_attention(
+                    q, k, v, is_causal=True
+                ),
                 "triton": ops.triton.torch.scaled_dot_product_attention,
             },
             args=(

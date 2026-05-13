@@ -1,9 +1,8 @@
 import functools
 
-import ninetoothed
-from ninetoothed import Tensor, block_size
+from ninetoothed import Tensor
 
-from ops.ninetoothed.kernels._common import DTYPES, build
+from ops.ninetoothed.kernels._common import build
 from ops.ninetoothed.kernels.mm import application
 
 
@@ -33,87 +32,51 @@ def arrangement(
     return input_arranged, other_arranged, output_arranged
 
 
-def premake(k, n, dtype, block_size_m, block_size_n, block_size_k):
+def premake(batch, m, k, n, dtype, block_size_m, block_size_n, block_size_k):
     arrangement_ = functools.partial(
         arrangement,
         block_size_m=block_size_m,
         block_size_n=block_size_n,
         block_size_k=block_size_k,
     )
-    shape_options = ({"upper_bound": 4}, None, None)
     tensors = (
-        Tensor(shape=(None, None, k), shape_options=shape_options, dtype=dtype),
-        Tensor(shape=(None, k, n), shape_options=shape_options, dtype=dtype),
-        Tensor(shape=(None, None, n), shape_options=shape_options, dtype=dtype),
+        Tensor(shape=(batch, m, k), dtype=dtype),
+        Tensor(shape=(batch, k, n), dtype=dtype),
+        Tensor(shape=(batch, m, n), dtype=dtype),
     )
 
     return arrangement_, application, tensors
 
 
-_SHAPES = (
-    (4096, 4096),
-    (4096, 1024),
-    (4096, 14336),
-    (14336, 4096),
-    (4096, 128256),
-)
-
-configs = tuple(
-    (
-        (),
-        {
-            "k": k,
-            "n": n,
-            "dtype": dtype,
-            "block_size_m": bm,
-            "block_size_n": bn,
-            "block_size_k": bk,
-        },
-        {"num_warps": nw, "num_stages": ns},
+def _configs(batch, m, k, n, dtype):
+    return (
+        (
+            (),
+            {
+                "batch": batch,
+                "m": m,
+                "k": k,
+                "n": n,
+                "dtype": dtype,
+                "block_size_m": 16,
+                "block_size_n": 64,
+                "block_size_k": 32,
+            },
+            {"num_warps": 4, "num_stages": 3},
+        ),
     )
-    for k, n in _SHAPES
-    for dtype in DTYPES
-    for bm in (16, 64)
-    for bn in (64, 128)
-    for bk in (32, 64)
-    for nw in (4, 8)
-    for ns in (3, 4)
-)
-
-_build_kernel = build(
-    premake,
-    configs,
-    meta_parameters=("block_size_m", "block_size_n", "block_size_k"),
-    kernel_name="bmm",
-)
 
 
-_BUILD_KN = frozenset(_SHAPES)
+@functools.cache
+def _kernel(batch, m, k, n, dtype):
+    return build(
+        premake,
+        _configs(batch, m, k, n, dtype),
+        kernel_name=f"bmm_{batch}_{m}_{k}_{n}",
+    )
 
 
-_BLOCK_SIZE_M = block_size()
-_BLOCK_SIZE_N = block_size()
-_BLOCK_SIZE_K = block_size()
-
-
-def _fallback_arrangement(
-    input,
-    other,
-    output,
-    BLOCK_SIZE_M=_BLOCK_SIZE_M,
-    BLOCK_SIZE_N=_BLOCK_SIZE_N,
-    BLOCK_SIZE_K=_BLOCK_SIZE_K,
-):
-    return arrangement(input, other, output, BLOCK_SIZE_M, BLOCK_SIZE_N, BLOCK_SIZE_K)
-
-
-_fallback_kernel = ninetoothed.make(
-    _fallback_arrangement, application, (Tensor(3), Tensor(3), Tensor(3))
-)
-
-
-def kernel(lhs, rhs, output, k, n, dtype):
-    if (k, n) in _BUILD_KN:
-        return _build_kernel(lhs, rhs, output, k, n, dtype)
-
-    return _fallback_kernel(lhs, rhs, output)
+def kernel(lhs, rhs, output, batch, m, k, n, dtype):
+    return _kernel(batch, m, k, n, dtype)(
+        lhs, rhs, output, batch, m, k, n, dtype, 16, 64, 32, 4, 3
+    )

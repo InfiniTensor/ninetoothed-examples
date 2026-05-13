@@ -1,22 +1,18 @@
 import functools
 
 import ninetoothed.language as ntl
-from ninetoothed import Tensor, block_size
+from ninetoothed import Tensor
 
-from ops.ninetoothed.kernels._common import DTYPES, build
-
-BLOCK_SIZE_M = block_size()
-BLOCK_SIZE_N = block_size()
-BLOCK_SIZE_K = block_size()
+from ops.ninetoothed.kernels._common import build
 
 
 def arrangement(
     input,
     other,
     output,
-    block_size_m=BLOCK_SIZE_M,
-    block_size_n=BLOCK_SIZE_N,
-    block_size_k=BLOCK_SIZE_K,
+    block_size_m,
+    block_size_n,
+    block_size_k,
 ):
     output_arranged = output.tile((block_size_m, block_size_n))
 
@@ -58,34 +54,37 @@ def premake(m, n, k, dtype, block_size_m, block_size_n, block_size_k):
     return arrangement_, application, tensors
 
 
-_SHAPES = tuple((s, s, s) for s in (2**i for i in range(3, 13)))
-
-configs = tuple(
-    (
-        (),
-        {
-            "m": m,
-            "n": n,
-            "k": k,
-            "dtype": dtype,
-            "block_size_m": bm,
-            "block_size_n": bn,
-            "block_size_k": bk,
-        },
-        {"num_warps": nw, "num_stages": ns},
+def _configs(m, n, k, dtype):
+    return tuple(
+        (
+            (),
+            {
+                "m": m,
+                "n": n,
+                "k": k,
+                "dtype": dtype,
+                "block_size_m": bm,
+                "block_size_n": bn,
+                "block_size_k": bk,
+            },
+            {"num_warps": nw, "num_stages": 3},
+        )
+        for bm in (64, 128)
+        for bn in (64, 128)
+        for bk in (32, 64)
+        for nw in (4, 8)
     )
-    for m, n, k in _SHAPES
-    for dtype in DTYPES
-    for bm in (64, 128)
-    for bn in (64, 128)
-    for bk in (32, 64)
-    for nw in (4, 8)
-    for ns in (3,)
-)
 
-kernel = build(
-    premake,
-    configs,
-    meta_parameters=("block_size_m", "block_size_n", "block_size_k"),
-    kernel_name="mm",
-)
+
+@functools.cache
+def _kernel(m, n, k, dtype):
+    return build(
+        premake,
+        _configs(m, n, k, dtype),
+        meta_parameters=("block_size_m", "block_size_n", "block_size_k"),
+        kernel_name=f"mm_{m}_{n}_{k}",
+    )
+
+
+def kernel(input, other, output, m, n, k, dtype):
+    return _kernel(m, n, k, dtype)(input, other, output, m, n, k, dtype)

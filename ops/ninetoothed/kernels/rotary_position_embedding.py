@@ -3,7 +3,7 @@ import functools
 import ninetoothed
 from ninetoothed import Tensor
 
-from ops.ninetoothed.kernels._common import DTYPES, build
+from ops.ninetoothed.kernels._common import build
 
 
 def arrangement(input, sin_table, cos_table, head_dim, interleaved):
@@ -54,18 +54,19 @@ def premake(head_dim, dtype, interleaved):
     return arrangement_, application, tensors
 
 
-configs = tuple(
-    (
-        (),
-        {"head_dim": head_dim, "dtype": dtype, "interleaved": interleaved},
-        {},
+def _configs(head_dim, dtype, interleaved):
+    return (
+        ((), {"head_dim": head_dim, "dtype": dtype, "interleaved": interleaved}, {}),
     )
-    for head_dim in (64, 128)
-    for dtype in (*DTYPES, ninetoothed.float32)
-    for interleaved in (False, True)
-)
 
-_kernel = build(premake, configs, kernel_name="rotary_position_embedding")
+
+@functools.cache
+def _kernel(head_dim, dtype, interleaved):
+    return build(
+        premake,
+        _configs(head_dim, dtype, interleaved),
+        kernel_name=f"rotary_position_embedding_{head_dim}_{int(interleaved)}",
+    )
 
 
 _TORCH_TO_NT_DTYPE = {}
@@ -84,12 +85,8 @@ def kernel(input, sin_table, cos_table, interleaved=True):
         )
 
     head_dim = input.shape[-1]
+    dtype = _TORCH_TO_NT_DTYPE[input.dtype]
 
-    return _kernel(
-        input,
-        sin_table,
-        cos_table,
-        head_dim,
-        _TORCH_TO_NT_DTYPE[input.dtype],
-        bool(interleaved),
+    return _kernel(head_dim, dtype, bool(interleaved))(
+        input, sin_table, cos_table, head_dim, dtype, bool(interleaved)
     )

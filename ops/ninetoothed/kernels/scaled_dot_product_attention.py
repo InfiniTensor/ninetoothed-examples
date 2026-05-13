@@ -2,7 +2,7 @@ import functools
 
 import ninetoothed
 import ninetoothed.language as ntl
-from ninetoothed import Tensor, block_size
+from ninetoothed import Tensor
 
 from ops.ninetoothed.kernels._common import build
 
@@ -82,63 +82,33 @@ def premake(head_dim, dtype, block_size_m, block_size_n):
     return arrangement_, application, tensors
 
 
-# Block-sweep matching JIT auto-tuner default range
-# (BLOCK_SIZE * head_dim <= 32768, so BLOCK_SIZE is up to 512 for head_dim=64).
-configs = tuple(
-    (
-        (),
-        {
-            "head_dim": 64,
-            "dtype": ninetoothed.float16,
-            "block_size_m": bm,
-            "block_size_n": bn,
-        },
-        {},
+def _configs(head_dim, dtype):
+    return tuple(
+        (
+            (),
+            {
+                "head_dim": head_dim,
+                "dtype": dtype,
+                "block_size_m": bm,
+                "block_size_n": bn,
+            },
+            {},
+        )
+        for bm in (32, 64, 128, 256, 512)
+        for bn in (32, 64, 128, 256, 512)
+        if bm * head_dim <= 32768 and bn * head_dim <= 32768
     )
-    for bm in (32, 64, 128, 256, 512)
-    for bn in (32, 64, 128, 256, 512)
-)
-
-_build_kernel = build(
-    premake,
-    configs,
-    meta_parameters=("block_size_m", "block_size_n"),
-    kernel_name="scaled_dot_product_attention",
-)
 
 
-_BUILD_CONFIGS = frozenset(
-    (kwargs["head_dim"], kwargs["dtype"]) for _, kwargs, _ in configs
-)
-
-_FALLBACK_BLOCK_SIZE_M = block_size()
-_FALLBACK_BLOCK_SIZE_N = block_size()
-
-
-def _fallback_arrangement(
-    q,
-    k,
-    v,
-    scale,
-    q_start,
-    o,
-    BLOCK_SIZE_M=_FALLBACK_BLOCK_SIZE_M,
-    BLOCK_SIZE_N=_FALLBACK_BLOCK_SIZE_N,
-):
-    return arrangement(q, k, v, scale, q_start, o, BLOCK_SIZE_M, BLOCK_SIZE_N)
-
-
-_shape_options = (None, None, None, {"constexpr": True, "upper_bound": 128})
-_q, _k, _v, _o = (Tensor(4, shape_options=_shape_options) for _ in range(4))
-_fallback_kernel = ninetoothed.make(
-    _fallback_arrangement,
-    application,
-    (_q, _k, _v, Tensor(0), Tensor(0), _o),
-)
+@functools.cache
+def _kernel(head_dim, dtype):
+    return build(
+        premake,
+        _configs(head_dim, dtype),
+        meta_parameters=("block_size_m", "block_size_n"),
+        kernel_name=f"scaled_dot_product_attention_{head_dim}",
+    )
 
 
 def kernel(q, k, v, scale, q_start, o, head_dim, dtype):
-    if (head_dim, dtype) in _BUILD_CONFIGS:
-        return _build_kernel(q, k, v, scale, q_start, o, head_dim, dtype)
-
-    return _fallback_kernel(q, k, v, scale, q_start, o)
+    return _kernel(head_dim, dtype)(q, k, v, scale, q_start, o, head_dim, dtype)
