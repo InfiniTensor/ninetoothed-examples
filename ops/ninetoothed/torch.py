@@ -35,10 +35,22 @@ def add(input, other):
 
 
 def addmm(input, mat1, mat2, beta=1, alpha=1):
-    output_shape = (mat1.shape[0], mat2.shape[1])
-    output = torch.empty(output_shape, dtype=mat1.dtype, device=mat1.device)
+    m, k = mat1.shape
+    _, n = mat2.shape
+    output = torch.empty((m, n), dtype=mat1.dtype, device=mat1.device)
 
-    ops.ninetoothed.kernels.addmm.kernel(input, mat1, mat2, beta, alpha, output)
+    ops.ninetoothed.kernels.addmm.kernel(
+        input,
+        mat1,
+        mat2,
+        float(beta),
+        float(alpha),
+        output,
+        m,
+        n,
+        k,
+        _DTYPE_MAPPING[mat1.dtype],
+    )
 
     return output
 
@@ -58,14 +70,16 @@ def bmm(lhs, rhs):
 
 
 def conv2d(input, filter):
-    n, _, h, w = input.shape
+    n, c, h, w = input.shape
     k, _, r, s = filter.shape
     p = h - r + 1
     q = w - s + 1
 
     output = torch.empty((n, k, p, q), dtype=input.dtype, device=input.device)
 
-    ops.ninetoothed.kernels.conv2d.kernel(input, filter, output)
+    ops.ninetoothed.kernels.conv2d.kernel(
+        input, filter, output, n, c, h, w, k, r, s, _DTYPE_MAPPING[input.dtype]
+    )
 
     return output
 
@@ -97,7 +111,7 @@ def max_pool2d(input, window_shape):
     output = torch.empty(n, c, p, q, dtype=input.dtype, device=input.device)
 
     ops.ninetoothed.kernels.max_pool2d.kernel(
-        input, output, WINDOW_HEIGHT=r, WINDOW_WIDTH=s
+        input, output, r, s, _DTYPE_MAPPING[input.dtype]
     )
 
     return output
@@ -154,7 +168,14 @@ def scaled_dot_product_attention(q, k, v, scale=None):
     o = torch.empty_like(q)
 
     ops.ninetoothed.kernels.scaled_dot_product_attention.kernel(
-        q, k, v, scale, q_start, o
+        q,
+        k,
+        v,
+        float(scale),
+        int(q_start),
+        o,
+        q.shape[-1],
+        _DTYPE_MAPPING[q.dtype],
     )
 
     return o

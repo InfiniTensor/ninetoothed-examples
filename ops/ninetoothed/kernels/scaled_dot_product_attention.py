@@ -1,14 +1,13 @@
+import functools
+
 import ninetoothed
 import ninetoothed.language as ntl
 from ninetoothed import Tensor, block_size
 
-BLOCK_SIZE_M = block_size()
-BLOCK_SIZE_N = block_size()
+from ops.ninetoothed.kernels._common import build
 
 
-def arrangement(
-    q, k, v, scale, q_start, o, BLOCK_SIZE_M=BLOCK_SIZE_M, BLOCK_SIZE_N=BLOCK_SIZE_N
-):
+def arrangement(q, k, v, scale, q_start, o, BLOCK_SIZE_M, BLOCK_SIZE_N):
     def arrange_q_or_o(input):
         arranged = input.tile((1, 1, BLOCK_SIZE_M, -1))
         arranged.dtype = arranged.dtype.squeeze((0, 1))
@@ -64,8 +63,82 @@ def application(q, k, v, scale, q_start, o):
     o = acc.to(o.dtype)  # noqa: F841
 
 
+def premake(head_dim, dtype, block_size_m, block_size_n):
+    arrangement_ = functools.partial(
+        arrangement,
+        BLOCK_SIZE_M=block_size_m,
+        BLOCK_SIZE_N=block_size_n,
+    )
+    shape = (None, None, None, head_dim)
+    tensors = (
+        Tensor(shape=shape, dtype=dtype),
+        Tensor(shape=shape, dtype=dtype),
+        Tensor(shape=shape, dtype=dtype),
+        Tensor(0, dtype=ninetoothed.float32),
+        Tensor(0, dtype=ninetoothed.int64),
+        Tensor(shape=shape, dtype=dtype),
+    )
+
+    return arrangement_, application, tensors
+
+
+# Block-sweep matching JIT auto-tuner default range
+# (BLOCK_SIZE * head_dim <= 32768, so BLOCK_SIZE is up to 512 for head_dim=64).
+configs = tuple(
+    (
+        (),
+        {
+            "head_dim": 64,
+            "dtype": ninetoothed.float16,
+            "block_size_m": bm,
+            "block_size_n": bn,
+        },
+        {},
+    )
+    for bm in (32, 64, 128, 256, 512)
+    for bn in (32, 64, 128, 256, 512)
+)
+
+_build_kernel = build(
+    premake,
+    configs,
+    meta_parameters=("block_size_m", "block_size_n"),
+    kernel_name="scaled_dot_product_attention",
+)
+
+
+_BUILD_CONFIGS = frozenset(
+    (kwargs["head_dim"], kwargs["dtype"]) for _, kwargs, _ in configs
+)
+
+_FALLBACK_BLOCK_SIZE_M = block_size()
+_FALLBACK_BLOCK_SIZE_N = block_size()
+
+
+def _fallback_arrangement(
+    q,
+    k,
+    v,
+    scale,
+    q_start,
+    o,
+    BLOCK_SIZE_M=_FALLBACK_BLOCK_SIZE_M,
+    BLOCK_SIZE_N=_FALLBACK_BLOCK_SIZE_N,
+):
+    return arrangement(q, k, v, scale, q_start, o, BLOCK_SIZE_M, BLOCK_SIZE_N)
+
+
 _shape_options = (None, None, None, {"constexpr": True, "upper_bound": 128})
 _q, _k, _v, _o = (Tensor(4, shape_options=_shape_options) for _ in range(4))
-tensors = (_q, _k, _v, Tensor(0), Tensor(0), _o)
+_fallback_kernel = ninetoothed.make(
+    _fallback_arrangement,
+    application,
+    (_q, _k, _v, Tensor(0), Tensor(0), _o),
+)
 
-kernel = ninetoothed.make(arrangement, application, tensors)
+
+def kernel(q, k, v, scale, q_start, o, head_dim, dtype):
+    if (head_dim, dtype) in _BUILD_CONFIGS:
+        return _build_kernel(q, k, v, scale, q_start, o, head_dim, dtype)
+
+    return _fallback_kernel(q, k, v, scale, q_start, o)
